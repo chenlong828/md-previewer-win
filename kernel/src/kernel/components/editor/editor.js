@@ -1,0 +1,301 @@
+// 主题应用与编辑器装配(含源码模式切换)
+import { Editor, rootCtx, editorViewCtx, editorViewOptionsCtx, remarkStringifyOptionsCtx } from '@milkdown/core'
+import { Selection } from '@milkdown/prose/state'
+import { commonmark } from '@milkdown/preset-commonmark'
+import { gfm } from '@milkdown/preset-gfm'
+import { history } from '@milkdown/plugin-history'
+import { listener, listenerCtx } from '@milkdown/plugin-listener'
+import { math, katexOptionsCtx } from '@milkdown/plugin-math'
+import { prism, prismConfig } from '@milkdown/plugin-prism'
+import { diagram } from '@milkdown/plugin-diagram'
+import { clipboard } from '@milkdown/plugin-clipboard'
+import { trailing } from '@milkdown/plugin-trailing'
+import { getMarkdown, replaceAll } from '@milkdown/utils'
+import mermaid from 'mermaid'
+import { state, isCodeMode, currentMarkdown } from '../../shared/state.js'
+import { notify } from '../../shared/bus.js'
+import { use } from '../../shared/ports.js'
+import { scheduleStats } from './stats.js'
+import { selInfoProse } from './selinfo.js'
+import { getMermaidView } from './mermaid-view.js'
+import { getImageView } from './image-view.js'
+import { cloneReadonly } from '../../shared/readonly-clone.js'
+
+import { fourSpaceListItem } from './list-indent.js'
+
+export function applyThemeDom() {
+    document.documentElement.dataset.theme = state.theme
+}
+
+export function applyMermaidTheme() {
+    mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: state.theme === 'dark' ? 'dark' : 'default',
+        fontFamily: 'inherit',
+    })
+}
+
+
+// ---------- 编辑器创建 ----------
+
+// 代码高亮语法注册(single source:web/src/languages.js)：
+// 代码视图与围栏代码块共用同一 refractor 注册表。
+export async function createEditor() {
+    applyMermaidTheme()
+
+    const pluginSet = state.pluginSet || 'full'
+    const useDiagram = pluginSet === 'full'
+    const useMath = pluginSet === 'full' || pluginSet === 'no-diagram'
+    const usePrism = pluginSet === 'full' || pluginSet === 'no-diagram'
+
+    const editor = await Editor.make()
+        .config((ctx) => {
+            ctx.set(rootCtx, document.getElementById('app'))
+            ctx.update(
+                prismConfig.key,
+                () => ({
+                    configureRefractor: () => {
+                        use('codeLanguages').ensureLanguages()
+                    },
+                }),
+            )
+            ctx.update(
+                katexOptionsCtx.key,
+                (prev) => ({ ...prev, throwOnError: false, strict: false }),
+            )
+            ctx.update(
+                editorViewOptionsCtx,
+                (prev) => ({
+                    ...prev,
+                    attributes: { ...(prev.attributes || {}), spellcheck: 'false', class: 'md-editor-view' },
+                }),
+            )
+            ctx.update(
+                remarkStringifyOptionsCtx,
+                (prev) => ({
+                    ...prev,
+                    bullet: '-',
+                    emphasis: '*',
+                    strong: '*',
+                    // 列表嵌套每级 4 空格(标准 Tab 等价缩进);缩进规则单点在
+                    // list-indent.js,不用 mdast 的 listItemIndent:'tab'
+                    // (会把首行标记也补成 "-   a"),见该文件头注释。
+                    handlers: { ...(prev.handlers || {}), listItem: fourSpaceListItem },
+                }),
+            )
+        })
+        .use(commonmark)
+        .use(gfm)
+        .use(history)
+        .use(listener)
+        .use(useMath ? math : [])
+        .use(usePrism ? prism : [])
+        .use(useDiagram ? diagram : [])
+        .use(useDiagram ? getMermaidView() : [])
+        .use(getImageView())
+        .use(clipboard)
+        .use(trailing)
+        .use(use('findService').findProsePlugin)
+        .use(selInfoProse)
+        .create()
+
+    editor.action((ctx) => {
+        ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prev) => {
+            // 单一脏机制:防抖窗(200ms)内的并发编辑会产生携带中间态的过期回调;
+            // 只认与当前 doc 同步的序列化结果,过期回调直接丢弃——最新状态必有
+            // 更新的回调跟进。基线对齐由 setMarkdown/markClean 同步保证,回调只做比对。
+            if (markdown === currentMarkdown()) {
+                notify('changed', { dirty: markdown !== state.baselineMarkdown })
+            }
+            scheduleStats()
+            // 查找进行中:文档变化后刷新计数(插件 apply 已重算匹配)
+            if (document.body.classList.contains('finding') && !state.sourceMode && use('findService').findUI.query) {
+                queueMicrotask(() => {
+                    state.editor.action((ctx2) => {
+                        const view = ctx2.get(editorViewCtx)
+                        const st = use('findService').findKey.getState(view.state)
+                        use('findService').updateFindCount(st ? st.matches.length : 0, st ? st.current : -1)
+                    })
+                })
+            }
+        })
+    })
+
+    // 任务列表复选框:点击 li 左侧复选区域切换勾选状态
+    editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        view.dom.addEventListener('click', (event) => {
+            const li = event.target.closest && event.target.closest('li[data-item-type="task"]')
+            if (!li) return
+            const rect = li.getBoundingClientRect()
+            if (event.clientX - rect.left > 28) return // 只响应复选框区域
+            try {
+                const pos = view.posAtDOM(li, 0)
+                const $pos = view.state.doc.resolve(pos)
+                for (let d = $pos.depth; d > 0; d--) {
+                    const node = $pos.node(d)
+                    if (node.attrs && typeof node.attrs.checked === 'boolean') {
+                        view.dispatch(view.state.tr.setNodeMarkup($pos.before(d), undefined, {
+                            ...node.attrs,
+                            checked: !node.attrs.checked,
+                        }))
+                        break
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        })
+    })
+
+    state.editor = editor
+    // 序列化钩子：shared 的 currentMarkdown 由这里拿到引擎口径（shared 保持零依赖）
+    state.serialize = (ed) => ed.action(getMarkdown())
+    state.ready = true
+
+    // 图片粘贴拦截(需挂在已创建的编辑器 DOM 上,捕获阶段先于 ProseMirror)
+    editor.action((ctx) => {
+        use('mediaPaste').setupImagePaste(ctx.get(editorViewCtx))
+    })
+
+    return editor
+}
+
+// ---------- 源码模式 ----------
+
+export function toggleSource(force) {
+    const target = force === undefined ? !state.sourceMode : !!force
+    if (target === state.sourceMode || !state.ready) return state.sourceMode
+    const ta = document.getElementById('source-editor')
+    if (target) {
+        ta.value = state.editor.action(getMarkdown())
+        document.body.classList.add('source-mode')
+    } else {
+        // 退出源码模式 = 注入 textarea 内容。若内容未偏离基线(未编辑或已保存),
+        // 以注入后的序列化结果重设基线——源码原文与序列化产物的尾换行等差异不算修改;
+        // 若已偏离基线,交由 listener 按旧基线比对上报脏状态。
+        const wasClean = ta.value === state.baselineMarkdown
+        document.body.classList.remove('source-mode')
+        state.editor.action(replaceAll(ta.value))
+        if (wasClean) state.baselineMarkdown = state.editor.action(getMarkdown())
+    }
+    state.sourceMode = target
+    notify('sourceMode', { value: target })
+    // 查找进行中:切换后在新界面重新搜索
+    if (document.body.classList.contains('finding') && use('findService').findUI.query) {
+        use('findService').runFind(use('findService').findUI.query, { caseSensitive: use('findService').findUI.caseSensitive })
+    }
+    return target
+}
+
+// ---------- 端口实现（由组合根注入，供 output / media 消费） ----------
+
+/** renderSurface：导出前需要确保处于渲染模式（源码模式要切回） */
+export function createRenderSurface() {
+    return {
+        setSourceMode(on) {
+            if (isCodeMode()) return false
+            return toggleSource(on)
+        },
+    }
+}
+
+/** imageInsertion：把图片节点插到指定选区（粘贴落盘后的唯一插入实现） */
+export function createImageInsertion() {
+    return {
+        insert(selection, payload) {
+            if (!state.ready) return false
+            return state.editor.action((ctx) => {
+                const view = ctx.get(editorViewCtx)
+                try {
+                    const node = view.state.schema.nodes.image.create({
+                        src: payload.src || '',
+                        alt: payload.alt || '',
+                        title: payload.title || '',
+                    })
+                    const tr = view.state.tr
+                    if (selection) {
+                        try { tr.setSelection(Selection.fromJSON(view.state.doc, selection)) } catch (e) {
+                            // 选区位置已失效（等待期用户编辑过）：退回当前选区
+                        }
+                    }
+                    view.dispatch(tr.replaceSelectionWith(node).scrollIntoView())
+                    view.focus()
+                    return true
+                } catch (e) {
+                    console.warn('insert imported image failed', e)
+                    return false
+                }
+            })
+        },
+    }
+}
+
+// ---------- 缩略图只读快照（组件内部导出，只经 assemble 注入 minimapSources） ----------
+
+function pageStyleFromRoot(root) {
+    const style = getComputedStyle(root)
+    const zoom = Number.parseFloat(style.zoom) || 1
+    const rect = root.getBoundingClientRect()
+    return { style, zoom, rect }
+}
+
+/** Markdown 面的只读快照：页面容器 + 已脱敏的真实渲染 DOM。 */
+export function createMarkdownMinimapSource() {
+    const root = document.getElementById('app')
+
+    function measure() {
+        const app = document.getElementById('app')
+        const rect = app?.getBoundingClientRect()
+        const contentWidth = Math.max(1, rect?.width || document.documentElement.clientWidth || 1)
+        const scrollTop = window.scrollY || document.documentElement.scrollTop || 0
+        const docHeight = Math.max(0, document.documentElement.scrollHeight || 0)
+        const viewportHeight = Math.max(0, window.innerHeight || document.documentElement.clientHeight || 0)
+        return { contentWidth, docHeight, viewportHeight, scrollTop, root: app || null }
+    }
+
+    function snapshot() {
+        const app = document.getElementById('app')
+        const prose = app?.querySelector('.ProseMirror')
+        if (!app || !prose) return null
+        const { style, zoom, rect } = pageStyleFromRoot(app)
+        const page = document.createElement('div')
+        page.className = 'minimap-page minimap-markdown-page'
+        page.style.width = `${rect.width / zoom}px`
+        page.style.zoom = String(zoom)
+        page.style.boxSizing = 'border-box'
+        page.style.margin = '0'
+        page.style.overflow = 'hidden'
+        page.style.padding = `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`
+        page.style.background = style.backgroundColor
+        page.style.color = style.color
+        const content = cloneReadonly(prose)
+        if (!content) return null
+        page.append(content)
+        return page
+    }
+
+    function scrollTo(top) {
+        const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+        const target = Math.max(0, Math.min(max, Number(top) || 0))
+        window.scrollTo({ top: target, left: 0, behavior: 'auto' })
+    }
+
+    return { root, measure, scrollTo, snapshot }
+}
+
+/** editorSurface：document 组件所需的编辑面能力（组件间唯一相识面） */
+export function createEditorSurface() {
+    return {
+        createEditor,
+        setSourceMode: toggleSource,
+        applyThemeDom,
+        applyMermaidTheme,
+    }
+}
+
+/** 把焦点交给 ProseMirror（编辑面内部与焦点 op 共用） */
+export function focusEditorView() {
+    if (!state.ready) return false
+    state.editor.action((ctx) => { ctx.get(editorViewCtx).focus() })
+    return true
+}

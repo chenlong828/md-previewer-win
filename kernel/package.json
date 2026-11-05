@@ -1,0 +1,40 @@
+{
+  "name": "mdpreview-web",
+  "private": true,
+  "version": "1.0.0",
+  "//milkdown-versions": "版本策略(勿盲改):@milkdown/* 锁 7.7.0;@milkdown/plugin-math 锁 7.5.9——7.5.9+7.7.0 为已知工作组合(selftest 行内/块级 KaTeX 渲染断言守门);7.7 全家桶曾在 addRow*Command 等处引入回归(表格命令因此自实现,见 web/src/tables.js 头注释),统一版本前必须带行为断言重验。ProseMirror 一律从 @milkdown/prose 取用,禁止引入独立 prosemirror-* 依赖(防双来源,node check-deps.mjs 校验)。",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "lint": "eslint src",
+    "test": "node --test test/",
+    "check:kernel": "node check-kernel.mjs",
+    "verify": "npm run lint && npm run check:kernel && npm test",
+    "postinstall": "node check-deps.mjs"
+  },
+  "dependencies": {
+    "@milkdown/core": "7.7.0",
+    "@milkdown/ctx": "7.7.0",
+    "@milkdown/plugin-clipboard": "7.7.0",
+    "@milkdown/plugin-diagram": "7.7.0",
+    "@milkdown/plugin-history": "7.7.0",
+    "@milkdown/plugin-listener": "7.7.0",
+    "@milkdown/plugin-math": "7.5.9",
+    "@milkdown/plugin-prism": "7.7.0",
+    "@milkdown/plugin-trailing": "7.7.0",
+    "@milkdown/preset-commonmark": "7.7.0",
+    "@milkdown/preset-gfm": "7.7.0",
+    "@milkdown/prose": "7.7.0",
+    "@milkdown/transformer": "7.7.0",
+    "@milkdown/utils": "7.7.0",
+    "katex": "^0.16.11",
+    "mermaid": "^10.9.0",
+    "refractor": "^5.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "jsdom": "^30.1.3"
+  }
+}

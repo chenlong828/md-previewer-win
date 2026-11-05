@@ -1,0 +1,10 @@
+# 统一换行与文本判定
+* text=auto eol=lf
+
+# Windows 脚本给 PowerShell 5.1 用，保持 CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 内核是上游快照：逐字节保留（任何换行改写都会让补丁对不齐）
+kernel/** -text

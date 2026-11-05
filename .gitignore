@@ -1,0 +1,32 @@
+# æ„å»ºä¸å·¥å…·é“¾äº§ç‰©
+bin/
+obj/
+dist/
+kernel/dist/
+.kernel-cache/
+
+# ä¾èµ–ç¼“å­˜ï¼ˆä»“åº“å†…ï¼Œä¾›ç¦»çº¿æ„å»ºï¼‰
+.nuget/
+.dotnet-home/
+.node_modules-cache/
+kernel/node_modules/
+
+# ä¸´æ—¶ä¸æœ¬åœ°æ–‡ä»¶
+.tmp/
+.probe
+*.tmp
+*.log
+*.user
+*.suo
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
+
+# æµ‹è¯•ä¸æˆªå›¾äº§ç‰©
+artifacts/
+coverage/
+*.trx
+# ÔËĞĞÆÚ±¾µØÊı¾İ£¨±¾»úµ÷ÊÔÓÃ£©
+.appdata/
+*.out.log
