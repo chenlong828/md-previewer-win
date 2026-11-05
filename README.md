@@ -15,25 +15,26 @@
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
-| M0 方向确认 | 壳选型、内核接入方式、首版范围 | 🔄 收尾（壳选型待确认） |
-| M1 垂直切片 | 内核 vendor + 桥 + WebView2 宿主 + 文档 IO + 壳骨架 | ⏳ 待启动 |
-| M2 浏览与媒体 | 文件抽屉、图片粘贴/拖放 | ⏳ |
+| M0 方向确认 | 壳选型、内核接入方式、首版范围 | ✅ WPF 壳 + 内核快照 |
+| M1 垂直切片 | 内核 vendor + 桥 + WebView2 宿主 + 文档 IO + 壳骨架 + 打包 | ✅ 2026-11-05 |
+| M2 浏览与媒体 | 文件抽屉、图片粘贴/拖放 | ⏳ 进行中 |
 | M3 阅读与输出 | 代码视图、PDF/HTML/打印、诊断 | ⏳ |
-| M4 分发 | 安装包、文件关联、签名 | ⏳ |
+| M4 分发 | 便携 zip、文件关联、图标 | ⏳ |
 
 ## 架构
 
 ```text
 WPF 壳（net9.0-windows）                     WebView2
-窗口 · 菜单 · 文件 IO · 编码 · 抽屉 · 打印      https://mdpreview.local（内核产物）
+窗口 · 菜单 · 文件 IO · 编码 · 抽屉 · 打印      https://mdpreview.local（内核产物 + 本地图片）
         │                                          │
         └──── v2 JSON 帧（41 op / 7 通知 / 2 请求）──┘
                     内核：transport · contract · semantics
                           components{document,editor,code,find,output,media,minimap}
 ```
 
-- 内核产物来自上游 `web/`（Milkdown 7.7 / ProseMirror），映射到虚拟主机加载，不联网。
-- 图片走自定义 `mdres://` scheme（全盘只读、无外传：CSP `connect-src 'none'`）。
+- 内核产物来自上游 `web/`（Milkdown 7.7 / ProseMirror），由壳按同源 URL 读盘供给，不联网。
+- 本地图片走同源前缀 `https://mdpreview.local/__res/<编码后的绝对路径>`（全盘只读；
+  CSP `connect-src 'none'` 断外传）。
 - 磁盘写入只在壳：编码（UTF-8/GB18030）、原子写、尾换行归一。
 
 ## 快速开始
@@ -43,10 +44,14 @@ WPF 壳（net9.0-windows）                     WebView2
 Node.js 18+ 与 pnpm（构建内核）。
 
 ```powershell
-pwsh ./build.ps1                 # 内核资源 + 壳 + 组装
-pwsh ./build.ps1 -SkipKernel     # 只编壳（内核产物已存在时）
-./dist/MDPreview.exe samples/功能演示.md
+pwsh ./build.ps1                 # 内核门 + 内核打包 + 壳 Release + 单测 → dist/MDPreview/
+pwsh ./build.ps1 -Dev            # 只做开发构建（Debug，不组装绿色目录）
+pwsh ./build.ps1 -SkipKernel     # 内核产物已存在时只编壳
+dist/MDPreview/MDPreview.exe samples/功能演示.md
 ```
+
+`dist/MDPreview/` 是**绿色目录**：整体拷贝即可运行，`portable.flag` 存在时用户数据
+（设置/日志/WebView2 配置）写在 `exe/data/` 下，不污染 `%APPDATA%`。
 
 ## 文档
 

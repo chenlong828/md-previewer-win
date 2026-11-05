@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>MDPreview.Win.Tests</AssemblyName>
+    <RootNamespace>MDPreview.Win.Tests</RootNamespace>
+    <!-- xunit v3 自带 Microsoft.Testing.Platform 运行器：不经 VSTest testhost，
+         避免受限环境下 testhost 监视父进程被拒（Win32Exception 5）。 -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MDPreview.Win\MDPreview.Win.csproj" />
+  </ItemGroup>
+
+</Project>

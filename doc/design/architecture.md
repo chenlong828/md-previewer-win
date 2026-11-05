@@ -33,16 +33,21 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 上游把 `semantics/paths.js` 的 URL 组装写成 macOS 常量：`file://` + posix 分段；
 `restoreForSave` 也硬编码 `file://` 前缀。Windows 必须把这两个常量参数化：
 
-- `PathPolicy = { urlScheme, pathStyle }`：
-  - `urlScheme`：`file`（macOS）或 `mdres`（Windows，§6.2）；
+- `PathPolicy = { urlPrefix, pathStyle }`：
+  - `urlPrefix`：`file://`（macOS）或 `https://mdpreview.local/__res`（Windows，§6.2）；
   - `pathStyle`：`posix` / `win32`（复用已有的 `normalizePath`/`joinBase` 分支）。
 - 会话级注入：`init.opts` 带上策略，`document` 组件持有；`applyForLoad` 用壳返回的 URL，
-  `restoreForSave` 按策略还原（否则保存会把 `mdres://` 写进文件——数据损坏）。
+  `restoreForSave` 按策略还原（否则保存会把资源 URL 写进文件——数据损坏）。
 - 同口径覆盖 `collectResourceRefs`（GC 引用）与 `image-view` 的输入路径→URL。
 
 补丁以 `kernel/PATCHES.md` 记录（文件、原因、测试），后续向上游提 PR；不在上游合并前
-扩大补丁面。**不选**「壳侧把 `mdres://` 换回路径」：那等于在壳里重写 Markdown 文本，
+扩大补丁面。**不选**「壳侧把资源 URL 换回路径」：那等于在壳里重写 Markdown 文本，
 违反硬约束并复活 R9。
+
+> 用「前缀」而不是「scheme」是实测后的收敛：WebView2 的
+> `CoreWebView2EnvironmentOptions.CustomSchemeRegistrations` 在 .NET 包装里为 `null`
+> （1.0.2903.40），自定义 scheme 注册不通；改走同源路径前缀后，图片与页面同源，
+> CSP 不必额外放行，也不依赖 scheme 注册。
 
 ## 2. 技术基线
 
@@ -72,7 +77,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 组件 | 职责 |
 |---|---|
 | `CMP-app-shell` | 窗口、菜单、最近文件、单实例、主题/缩放、缩略图偏好 |
-| `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、虚拟主机、`mdres`、CSP、上下文菜单 |
+| `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、同源资源前缀、CSP、上下文菜单 |
 | `CMP-document-io` | 读写、编码检测、原子写、尾换行、外部修改监听 |
 | `CMP-drawer`（M2） | 目录树抽屉、懒加载、宽度拖拽 |
 | `CMP-export`（M3） | PDF/HTML/打印 |
@@ -98,10 +103,17 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   `bad_payload`、`not_ready`、`unsupported_version`、`internal`）。
 - 帧：请求 `{v:2, op, id, payload}`，响应回显 `id` + `ok`/`error`，通知无 `id`。
 - 握手：`init` 是 ready 前唯一允许的 op，必须带 `opts.protocolVersion`；不匹配即
-  `unsupported_version` 且内核禁用（不静默降级）。
+  `unsupported_version` 且内核禁用（不静默降级）。**握手信息（`kernelVersion`/
+  `protocolVersion`/`ops`）在 `init` 的应答里**，不在 `ready` 通知里。
 - Windows 实现：注入 20 行前导脚本（`__mdHostChannel.post` → `chrome.webview.postMessage`；
   `message` → `__mdKernel.receive`），壳侧 `PostWebMessageAsString` 发帧、
   `TryGetWebMessageAsString` 收帧——**不需要 `ExecuteScriptAsync`**。
+- **必须先等 `boot` 再发帧**：`boot` 之前页面里还没有 `__mdKernel.receive`，
+  此时投递的帧会被静默丢弃（M1 冒烟实测：表现为 `init` 超时）。`KernelClient` 用
+  `Booted` 门控所有 `SendAsync`；前导脚本另外暂存早到的帧作为二重保险。
+- 壳级快捷键：Chromium 把 `Ctrl+S/O/P/F/±/0` 当**浏览器加速键**在进程内消费，开着时
+  页面收不到 `keydown`。因此 `AreBrowserAcceleratorKeysEnabled = false`，由前导脚本
+  统一转成 `{__host:'shortcut', key}` 交给壳；编辑键（`Ctrl+C/V/X/Z/A`）不受该开关影响。
 - 两个请求必须由壳作答：`resolveResources` 自包含 `baseDir`（不猜当前目录），
   `importImage` 由壳落盘后回传路径；磁盘写入只发生在壳。
 
@@ -109,25 +121,34 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 ### 6.1 页面来源
 
-- 内核产物映射到虚拟主机 `https://mdpreview.local/`（`SetVirtualHostNameToFolderMapping`），
-  页面与 bundle 从该源加载；不启本地 HTTP 服务。
-- 关闭：DevTools、默认右键菜单、脚本对话框、下载、新窗口、权限请求（全部拒绝）。
+- 内核产物与本地图片都从 `https://mdpreview.local` 同源提供：壳注册
+  `AddWebResourceRequestedFilter("https://mdpreview.local/*")`，在
+  `WebResourceRequested` 里读盘应答（`/` → `index.html`，MIME 按扩展名，
+  `index.html` 附 CSP 响应头）。**不用虚拟主机目录映射**：映射后请求不再进壳，
+  CSP 头也无处可加。
+- 不启本地 HTTP 服务；不做目录映射。
+- 关闭：DevTools、脚本对话框、下载、新窗口、权限请求（全部拒绝）；默认右键菜单保留
+  （编辑型应用需要系统剪切/复制/粘贴项）。
 
 ### 6.2 图片与本地资源
 
-- 方案：注册自定义 scheme `mdres`，`WebResourceRequested` 里按
-  `mdres://local/<base64url(path)>` 读盘并以正确 MIME 返回。
-- 为什么不用 `file://`：虚拟主机是 https 源，Chromium 拒绝 https 页面加载 `file://`
+- 内核拿到的资源 URL 形如 `https://mdpreview.local/__res/C:/docs/a%20b/图.png`，
+  壳按前缀剥出路径、逐段 percent-decode、转回 win32 路径后读盘。
+- 为什么不用自定义 scheme：见 §1.1 的实测结论（注册 API 不可用）。
+- 为什么不用 `file://`：页面是同源 https，Chromium 拒绝 https 页面加载 `file://`
   子资源；换 `file://` 页面则要开 `--allow-file-access-from-files`（更宽的全局开关）。
-- 壳返回给内核的 URL 即 `mdres://…`；保存时内核按 §1.1 还原为相对/绝对路径。
-  壳读盘范围 = 全盘只读（与上游 §1.1 同等暴露面），失效条件见 §11。
+- 保存时内核按 §1.1 还原为相对/绝对路径。壳读盘范围 = 全盘只读（与上游 §1.1 同等
+  暴露面），失效条件见 §11。
 
 ### 6.3 CSP 与脚本
 
-- CSP：`default-src 'self'; img-src 'self' mdres: data:; style-src 'self' 'unsafe-inline';
-  script-src 'self'; connect-src 'none'`。`connect-src 'none'` 是防外传的关键一条
+- CSP 由壳作为 **HTTP 响应头**下发（比 `meta` 更强，且随包不需要构建期注入）：
+  `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data:;
+  connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none';
+  form-action 'none'`。`connect-src 'none'` 是防外传的关键一条
   （mermaid `securityLevel: 'loose'` 的代价由此兜住）。
-- 不注入任何业务脚本；前导脚本只做通道接线。
+- 不注入任何业务脚本；前导脚本只做通道接线与快捷键转发。
 
 ## 7. 文件 IO 与路径
 
@@ -146,7 +167,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 多窗口、最近文件、外部修改 | 同构 | M1 |
 | 主题（跟系统）、缩放 | 同构 | M1 |
 | 右侧文档缩略图（Markdown/代码） | 内核自带，壳给偏好与菜单 | M1（Markdown）/ M3（代码面） |
-| 图片显示、粘贴/拖放导入、GC | 同构（`mdres` + 壳落盘） | M2 |
+| 图片显示、粘贴/拖放导入、GC | 同构（同源资源前缀 + 壳落盘） | M2 |
 | 文件抽屉、目录模式 | 同构 | M2 |
 | 代码只读视图、行号、语言切换 | 同构 | M3 |
 | 查找、源码模式 | 同构 | M1 接线 / M3 验收 |
@@ -155,8 +176,13 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 ## 9. 构建与分发
 
-- `build.ps1`：内核门（`check-kernel.mjs` + `node --test test/`）→ `dotnet publish` →
-  组装输出目录（`kernel/dist` 作为资源随包）。
+- `build.ps1` 四段：内核门（`check-kernel.mjs` + 逐个执行 `test/*.test.js`，不用
+  `node --test`——受限环境 spawn 会 EPERM）→ 内核打包（esbuild → `kernel/dist`）→
+  壳 `dotnet publish -r win-x64 --self-contained` → 单元测试（xunit v3 / MTP 运行器）。
+- 产物：`dist/MDPreview/`（含 `web/` 与 `portable.flag`，约 133 MB），整目录拷贝即可运行；
+  `portable.flag` 存在时用户数据写 `exe/data/`（绿色版语义）。
+- 单元测试不经 VSTest：`testhost` 会因监视父进程被拒（`Win32Exception 5`）而启动失败，
+  改用 xunit v3 自带的 Microsoft.Testing.Platform 运行器（`dotnet run` 或直接跑测试 exe）。
 - 依赖安装与内核构建需要网络/子进程：**完全权限下执行一次并缓存**；受限会话只能
   `dotnet build`（需仓库内 `DOTNET_CLI_HOME`/`NUGET_PACKAGES`）。
 - 分发（M4）：便携 zip 起步，安装包与签名后置；Runtime 缺失时给下载提示。
@@ -171,7 +197,10 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 - **内核快照漂移**：若上游内核大改（协议版本升级、op 增删），补丁与 C# 客户端需同步升级；
   协议版本不匹配时握手会显式失败，不会静默错乱。
-- **`mdres` 全盘只读**：若产品要打开不可信文档，必须收窄到文档目录（与上游 §1.1 同一失效条件）。
+- **本地资源全盘只读**：若产品要打开不可信文档，必须把资源读取收窄到文档目录
+  （与上游 §1.1 同一失效条件）。
+- **浏览器加速键已关闭**：`Ctrl+P`/`Ctrl+F` 等不再由 Chromium 处理；若将来要放行原生
+  打印/查找，需改回开关并重新安排快捷键，避免双份行为。
 - **`--allow-file-access-from-files`**：本方案不使用；若将来为兼容回退到 `file://` 页面，
   需重新评估该开关的暴露面。
 - **Win10 1809**：WebView2 支持但未实机验证；M4 前补测。
