@@ -34,6 +34,10 @@ public partial class DocumentWindow : Window
     readonly MenuItem _recentMenu = new() { Header = "最近打开" };
     readonly MenuItem _sourceMenu = new() { Header = "源码模式", IsCheckable = true };
     readonly MenuItem _minimapMenu = new() { Header = "显示文档缩略图", IsCheckable = true };
+    readonly MenuItem _drawerMenu = new() { Header = "文件抽屉", IsCheckable = true };
+
+    static readonly object DrawerPlaceholder = new();
+    string? _drawerRoot;
 
     public DocumentWindow(AppSettings settings, string? path = null)
     {
@@ -47,6 +51,7 @@ public partial class DocumentWindow : Window
         SourceInitialized += (_, _) => ApplyChrome(IsDark);
         Closing += OnClosing;
         Activated += (_, _) => UpdateRecentMenu();
+        ApplyDrawerState();
     }
 
     public string? DocumentPath => _path;
@@ -71,6 +76,7 @@ public partial class DocumentWindow : Window
             _host.RequestHandler = HandleKernelRequest;
             _host.Notification += OnKernelNotification;
             _host.Shortcut += OnShortcut;
+            _host.DroppedImage += OnDroppedImage;
             await _host.InitializeAsync();
             _kernel = _host.Client;
 
@@ -124,6 +130,8 @@ public partial class DocumentWindow : Window
         if (protocol != AppInfo.ProtocolVersion)
             throw new InvalidOperationException($"内核协议版本不匹配：页面 {protocol}，壳 {AppInfo.ProtocolVersion}");
         Log.Info($"handshake kernel={version} protocol={protocol} ops={ops}");
+
+        if (_settings.DrawerVisible) LoadDrawerRoot();
     }
 
     // ---------------------------------------------------------------- 打开 / 保存
@@ -155,6 +163,7 @@ public partial class DocumentWindow : Window
             UpdateTitle();
             UpdateRecentMenu();
             StartWatcher(path);
+            if (_settings.DrawerVisible) LoadDrawerRoot();
             Log.Info("opened " + path);
         }
         catch (Exception ex)
@@ -251,8 +260,108 @@ public partial class DocumentWindow : Window
     Task<JsonNode?> HandleKernelRequest(string op, JsonObject payload) => op switch
     {
         "resolveResources" => Task.FromResult<JsonNode?>(ResolveResources(payload)),
+        "importImage" => Task.FromResult<JsonNode?>(ImportImage(payload)),
         _ => throw new KernelException("unknown_op", $"壳未实现请求 {op}"),
     };
+
+    /// <summary>
+    /// 粘贴/拖入图片：壳落盘到 <c>resource/&lt;文档名&gt;/</c>，回传可显示的资源 URL
+    /// （保存时由内核按 PathPolicy 还原成相对路径）。失败只影响这一次粘贴。
+    /// </summary>
+    JsonObject ImportImage(JsonObject payload)
+    {
+        if (_path is null)
+        {
+            PromptSaveBeforeImage();
+            return new JsonObject { ["ok"] = false };
+        }
+
+        try
+        {
+            var kind = payload["kind"]?.GetValue<string>()
+                       ?? (payload["data"] is null ? "file" : "blob");
+            ImportedImage imported;
+            if (kind == "blob")
+            {
+                var base64 = payload["data"]?.GetValue<string>() ?? "";
+                if (base64.Length == 0) throw new ImageImportException("剪贴板里没有图片数据");
+                imported = ImageStore.ImportBlob(Convert.FromBase64String(base64),
+                    payload["mime"]?.GetValue<string>(), _path);
+            }
+            else
+            {
+                var raw = payload["path"]?.GetValue<string>() ?? "";
+                imported = ImageStore.ImportFile(ImageStore.PathFromText(raw), _path);
+            }
+
+            Log.Info($"image imported {imported.FileName}");
+            return new JsonObject { ["ok"] = true, ["src"] = ImageStore.ToResourceUrl(imported.Path) };
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("image import failed: " + ex.Message);
+            MessageBox.Show(this, ImageStore.DescribeFailure(ex), "导入图片失败",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return new JsonObject { ["ok"] = false };
+        }
+    }
+
+    void PromptSaveBeforeImage() => MessageBox.Show(this,
+        "请先保存文档。\n插入图片需要先保存文档，图片将存入文档旁的 resource/ 目录。",
+        Product, MessageBoxButton.OK, MessageBoxImage.Information);
+
+    async Task InsertImageFromDialogAsync()
+    {
+        if (_kernel is null) return;
+        if (_path is null) { PromptSaveBeforeImage(); return; }
+
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "插入图片",
+            Filter = "图片文件|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg;*.tif;*.tiff;*.heic;*.avif|所有文件|*.*",
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var imported = ImageStore.ImportFile(dialog.FileName, _path);
+            await _kernel.SendAsync("insertImage", new JsonObject
+            {
+                ["src"] = ImageStore.ToResourceUrl(imported.Path),
+                ["alt"] = "",
+                ["title"] = "",
+            });
+            Log.Info($"image inserted {imported.FileName}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("image insert failed: " + ex.Message);
+            MessageBox.Show(this, ImageStore.DescribeFailure(ex), "导入图片失败",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>关闭时清理 resource 目录里未被引用的图片（引用集合由内核给）。</summary>
+    async Task CollectUnreferencedImagesAsync()
+    {
+        if (_kernel is null || _path is null || _dirty) return;
+        try
+        {
+            var result = await _kernel.SendAsync("getResourceRefs", null, TimeSpan.FromSeconds(5));
+            var referenced = new List<string>();
+            if (result?["paths"] is JsonArray paths)
+                foreach (var item in paths)
+                    if (item?.GetValue<string>() is { Length: > 0 } value) referenced.Add(value);
+
+            var deleted = ImageStore.CleanUnreferenced(_path, referenced);
+            if (deleted.Count > 0) Log.Info("image gc deleted: " + string.Join(", ", deleted));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("image gc skipped: " + ex.Message);
+        }
+    }
 
     JsonObject ResolveResources(JsonObject payload)
     {
@@ -332,12 +441,168 @@ public partial class DocumentWindow : Window
             "close" => CloseWindowAsync(),
             "find" => RunOpAsync("openFindBar"),
             "toggleSource" => RunOpAsync("toggleSource"),
-            "toggleDrawer" => Task.CompletedTask,
+            "toggleDrawer" => ToggleDrawerAsync(),
             "zoomIn" => ZoomByAsync(0.1),
             "zoomOut" => ZoomByAsync(-0.1),
             "zoomReset" => SetZoomAsync(1.0),
             _ => Task.CompletedTask,
         };
+    }
+
+    Task ToggleDrawerAsync()
+    {
+        ToggleDrawer();
+        return Task.CompletedTask;
+    }
+
+    void OnDroppedImage(string mime, string base64)
+    {
+        if (_kernel is null || string.IsNullOrEmpty(base64)) return;
+        _ = InsertDroppedImageAsync(mime, base64);
+    }
+
+    /// <summary>拖入的图片：壳落盘 → 内核 insertImage（与粘贴同一条落盘/插入路径）。</summary>
+    async Task InsertDroppedImageAsync(string mime, string base64)
+    {
+        if (_path is null) { PromptSaveBeforeImage(); return; }
+        try
+        {
+            var imported = ImageStore.ImportBlob(Convert.FromBase64String(base64), mime, _path);
+            await _kernel!.SendAsync("insertImage", new JsonObject
+            {
+                ["src"] = ImageStore.ToResourceUrl(imported.Path),
+                ["alt"] = "",
+                ["title"] = "",
+            });
+            Log.Info($"image dropped {imported.FileName}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("image drop failed: " + ex.Message);
+            MessageBox.Show(ImageStore.DescribeFailure(ex), "导入图片失败",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    // ---------------------------------------------------------------- 文件抽屉
+
+    void ToggleDrawer()
+    {
+        _settings.DrawerVisible = !_settings.DrawerVisible;
+        _settings.Save();
+        ApplyDrawerState();
+        if (_settings.DrawerVisible && _drawerRoot is null) LoadDrawerRoot();
+    }
+
+    void ApplyDrawerState()
+    {
+        var visible = _settings.DrawerVisible;
+        _drawerMenu.IsChecked = visible;
+        DrawerPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        DrawerSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        DrawerColumn.Width = visible ? new GridLength(Math.Clamp(_settings.DrawerWidth, 180, 520)) : new GridLength(0);
+        SplitColumn.Width = visible ? new GridLength(4) : new GridLength(0);
+    }
+
+    void LoadDrawerRoot()
+    {
+        _drawerRoot = FileTree.RootFor(_path);
+        DrawerRootText.Text = Path.GetFileName(_drawerRoot) is { Length: > 0 } name ? name : _drawerRoot;
+        DrawerRootText.ToolTip = _drawerRoot;
+        DrawerTree.Items.Clear();
+        foreach (var entry in FileTree.Enumerate(_drawerRoot)) DrawerTree.Items.Add(BuildDrawerNode(entry));
+        SelectCurrentDocumentInDrawer();
+    }
+
+    TreeViewItem BuildDrawerNode(FileEntry entry)
+    {
+        var item = new TreeViewItem
+        {
+            Tag = entry,
+            Header = DrawerHeader(entry),
+            Padding = new Thickness(2, 1, 2, 1),
+            FontWeight = entry.Path == _path ? FontWeights.SemiBold : FontWeights.Normal,
+        };
+        if (entry.IsDirectory)
+        {
+            // 懒加载：先放占位行，展开时才取下一层（大目录不一次扫盘）
+            item.Items.Add(new TreeViewItem { Tag = DrawerPlaceholder });
+            item.Expanded += OnDrawerDirectoryExpanded;
+        }
+        return item;
+    }
+
+    static TextBlock DrawerHeader(FileEntry entry) => new()
+    {
+        Text = (entry.IsDirectory ? "▸ " : "  ") + entry.Name,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        ToolTip = entry.Path,
+    };
+
+    void OnDrawerDirectoryExpanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TreeViewItem item || item.Tag is not FileEntry entry || !entry.IsDirectory) return;
+        if (item.Items.Count != 1 || !ReferenceEquals((item.Items[0] as TreeViewItem)?.Tag, DrawerPlaceholder)) return;
+
+        item.Items.Clear();
+        foreach (var child in FileTree.Enumerate(entry.Path)) item.Items.Add(BuildDrawerNode(child));
+    }
+
+    void SelectCurrentDocumentInDrawer()
+    {
+        if (_path is null) return;
+        foreach (var item in DrawerTree.Items.OfType<TreeViewItem>())
+        {
+            if (item.Tag is FileEntry entry && !entry.IsDirectory &&
+                string.Equals(entry.Path, _path, StringComparison.OrdinalIgnoreCase))
+            {
+                item.IsSelected = true;
+                item.BringIntoView();
+                return;
+            }
+        }
+    }
+
+    void OnDrawerDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (DrawerTree.SelectedItem is not TreeViewItem item || item.Tag is not FileEntry entry) return;
+        if (entry.IsDirectory)
+        {
+            item.IsExpanded = !item.IsExpanded;
+            return;
+        }
+        if (entry.Path == _path) return;
+        e.Handled = true;
+        App.Current.OpenDocument(entry.Path); // 一文档一窗口：在抽屉里点文件 = 开新窗口
+    }
+
+    void OnDrawerUpClick(object sender, RoutedEventArgs e)
+    {
+        var parent = Path.GetDirectoryName(_drawerRoot ?? "");
+        if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) return;
+        _drawerRoot = parent;
+        DrawerRootText.Text = Path.GetFileName(parent) is { Length: > 0 } name ? name : parent;
+        DrawerRootText.ToolTip = parent;
+        DrawerTree.Items.Clear();
+        foreach (var entry in FileTree.Enumerate(parent)) DrawerTree.Items.Add(BuildDrawerNode(entry));
+    }
+
+    void OnDrawerHomeClick(object sender, RoutedEventArgs e)
+    {
+        _drawerRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        DrawerRootText.Text = "用户目录";
+        DrawerRootText.ToolTip = _drawerRoot;
+        DrawerTree.Items.Clear();
+        foreach (var entry in FileTree.Enumerate(_drawerRoot)) DrawerTree.Items.Add(BuildDrawerNode(entry));
+    }
+
+    void OnDrawerSplitterDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (DrawerColumn.Width.IsAbsolute && DrawerColumn.Width.Value > 0)
+        {
+            _settings.DrawerWidth = DrawerColumn.Width.Value;
+            _settings.Save();
+        }
     }
 
     async Task RunOpAsync(string op, JsonObject? payload = null)
@@ -477,6 +742,7 @@ public partial class DocumentWindow : Window
     async Task CloseWindowAsync()
     {
         if (!await ConfirmDiscardAsync()) return;
+        await CollectUnreferencedImagesAsync();
         _closingConfirmed = true;
         Close();
     }
@@ -563,6 +829,8 @@ public partial class DocumentWindow : Window
         edit.Items.Add(Item("撤销", (_, _) => _ = RunOpAsync("undo"), "Ctrl+Z"));
         edit.Items.Add(Item("重做", (_, _) => _ = RunOpAsync("redo"), "Ctrl+Y"));
         edit.Items.Add(new Separator());
+        edit.Items.Add(Item("插入图片…", (_, _) => _ = InsertImageFromDialogAsync(), "Ctrl+Shift+I"));
+        edit.Items.Add(new Separator());
         edit.Items.Add(Item("查找…", (_, _) => _ = RunOpAsync("openFindBar"), "Ctrl+F"));
         _sourceMenu.Click += (_, _) => _ = RunOpAsync("toggleSource");
         edit.Items.Add(_sourceMenu);
@@ -580,6 +848,8 @@ public partial class DocumentWindow : Window
         view.Items.Add(zoom);
         _minimapMenu.Click += (_, _) => _ = ToggleMinimapAsync();
         view.Items.Add(_minimapMenu);
+        _drawerMenu.Click += (_, _) => ToggleDrawer();
+        view.Items.Add(_drawerMenu);
 
         var help = new MenuItem { Header = "帮助(_H)" };
         help.Items.Add(Item("打开日志目录", (_, _) =>

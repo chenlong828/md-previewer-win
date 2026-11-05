@@ -30,6 +30,9 @@ public sealed class KernelHost
     public event Action<string, JsonObject>? Notification;
     public event Action<string>? Shortcut;
 
+    /// <summary>页面里拖入的图片（mime + base64），壳落盘后插入。</summary>
+    public event Action<string, string>? DroppedImage;
+
     public Func<string, JsonObject, Task<JsonNode?>>? RequestHandler { get; set; }
 
     public bool DevTools { get; set; }
@@ -61,6 +64,7 @@ public sealed class KernelHost
         Client = new KernelClient(Core);
         Client.Notification += (op, payload) => Notification?.Invoke(op, payload);
         Client.Shortcut += key => Shortcut?.Invoke(key);
+        Client.DroppedImage += (mime, data) => DroppedImage?.Invoke(mime, data);
         Client.RequestHandler = (op, payload) => RequestHandler?.Invoke(op, payload) ?? Task.FromResult<JsonNode?>(null);
 
         Core.AddWebResourceRequestedFilter("https://mdpreview.local/*", CoreWebView2WebResourceContext.All);

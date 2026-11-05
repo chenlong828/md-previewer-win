@@ -5,7 +5,7 @@ status: done
 updated: 2026-11-05
 ---
 
-# 工序结果：M1 垂直切片（Windows 壳跑通「打开 → 编辑 → 保存 → 打包」）
+# 工序结果：M1 垂直切片 → M2 抽屉与图片（Windows 壳跑通「打开 → 编辑 → 保存 → 插图 → 打包」）
 
 ## 1. 结论
 
@@ -63,15 +63,48 @@ dist/MDPreview/MDPreview.exe 冒烟        → handshake kernel=0.1.0 protocol=2
 
 ## 5. 已知偏差与遗留
 
-- `importImage` 未实现：当前若粘贴/拖入图片，壳回 `unknown_op`（M2 补落盘与路径回传）。
-- 外部修改提示、关闭前保存确认、最近文件菜单项为**代码就绪但未自动化验证**（依赖人工点击）。
+- 外部修改提示、关闭前保存确认为**代码就绪但未自动化验证**（依赖人工点击）。
 - 暗色主题下缩略图首屏底色偏亮，待 M3 缩略图验收时与上游比对。
 - 首次冷启动（新建 WebView2 用户数据目录）约 18 s，二次启动明显更快；M3 可做首启提示。
 - `build.ps1` 的 `-SkipGates` / `-SkipTests` 已就位，但 CI 化（GitHub Actions）未做。
 
-## 6. 下一步（M2）
+## 6. M2 结果：抽屉 + 图片（2026-11-05）
 
-1. `importImage`：`media/image-paste.js` 的载荷 → 壳落盘 `resources/` → 回传相对路径；
-2. 文件抽屉：目录树懒加载、宽度拖拽、锚点（复用上游 `drawerView` 语义）；
-3. 图片拖放（`AllowDrop` + `DragOver/Drop`，区分 .md 与图片）；
-4. 最近文件菜单完善与「清空」；外部修改提示补验收。
+### 6.1 交付
+
+| 区域 | 文件 | 说明 |
+|---|---|---|
+| 图片落盘 | `src/MDPreview.Win/Io/ImageStore.cs` | `<文档>/resource/<文档名>/`、`img_NNN`、原名冲突 `-2`、GC、URL/路径编解码 |
+| 抽屉取数 | `src/MDPreview.Win/Io/FileTree.cs` | 单层枚举、目录优先、跳过隐藏/`node_modules`、只留可打开文本类型 |
+| 抽屉 UI | `DocumentWindow.xaml(.cs)` | 左栏 TreeView + 分隔条 + 上级/用户目录按钮；懒加载展开；双击开新窗口；宽度与开关持久化 |
+| 桥 | `KernelClient`/`KernelHost`/`webview2-prelude.js` | `__host:'dropImage'` 宿主消息、`importImage` 请求应答、拖入图片读字节 |
+| 菜单 | `DocumentWindow` 编辑/视图 | 「插入图片…」（Ctrl+Shift+I）、「文件抽屉」（Ctrl+\） |
+| 测试 | `tests/.../ImageStoreTests.cs`、`FileTreeTests.cs` | 17 项（命名/冲突/校验/GC/编码/枚举/根目录） |
+
+### 6.2 验收证据（实机，`artifacts/mdpreview.log`）
+
+```
+selftest paste: imgs=1 https://mdpreview.local/__res/D%3A/.../resource/paste/img_001.png [120x80]
+selftest markdown: # 粘贴测试\n\n正文。![](resource/paste/img_001.png)\n
+image dropped img_001.png      （拖入路径复用同一落盘/插入链路）
+```
+
+- 粘贴与拖入都经「内核识别 → `importImage` → 壳落盘 → `insertImage`」，回传的是同源资源
+  URL，图片按真实尺寸渲染（`120x80`）；保存时内核 `restoreForSave` 已还原成相对路径。
+- 抽屉截图：根目录名、↑/⌂、`resource/`、`env.txt`、`paste.md`（当前文档加粗选中）。
+- 单元测试 34 项全绿（TextFile 8 / AppSettings 8 / ImageStore 9 / FileTree 5 + 4 theory）。
+
+### 6.3 取舍与偏差
+
+- 拖入 **.md 文件**不打开新窗口：Chromium 不把文件真实路径交给页面，反查路径需
+  关掉 `AllowExternalDrop` 走原生 OLE，本轮不做（上游用原生拖放实现）。当前只接管图片。
+- 抽屉不展示二进制/非文本文件，也不做「锚点跳转」（上游的 anchor 菜单）——M3 与
+  代码视图一起补。
+- 抽屉不自动 rescan（切回窗口不重建树），靠重新打开或切根刷新；上游是激活即 rescan。
+
+## 7. 下一步（M3）
+
+1. 代码只读视图（44 语言 / 行号 / 缩略图）与语言表单一来源 `resources/languages.json`；
+2. 右侧缩略图验收（暗色首屏底色）与折叠交互；
+3. 查找栏与源码模式验收；PDF/HTML/打印（`PrintToPdfAsync` + 内核导出）；
+4. 诊断子命令（自检/截图/日志），并可复用本轮临时探针的「合成粘贴/拖放」思路。

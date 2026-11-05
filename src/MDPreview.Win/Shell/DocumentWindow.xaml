@@ -43,13 +43,49 @@
             </StatusBarItem>
         </StatusBar>
         <Grid>
-            <wv2:WebView2 x:Name="Web" />
-            <Border x:Name="Overlay" Background="{DynamicResource PageBg}">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock x:Name="OverlayText" Text="正在加载编辑器…" FontSize="14"
-                               Foreground="{DynamicResource MutedFg}" />
-                </StackPanel>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="DrawerColumn" Width="0" />
+                <ColumnDefinition x:Name="SplitColumn" Width="0" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="DrawerPanel" Grid.Column="0" Background="{DynamicResource ChromeBg}"
+                    BorderBrush="{DynamicResource ChromeBorder}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource ChromeBorder}"
+                            BorderThickness="0,0,0,1">
+                        <DockPanel>
+                            <Button x:Name="DrawerHomeButton" DockPanel.Dock="Right" Content="⌂" Width="24"
+                                    ToolTip="跳到用户目录" FontSize="13" Padding="0" Click="OnDrawerHomeClick"
+                                    Foreground="{DynamicResource ChromeFg}" Background="Transparent"
+                                    BorderBrush="{DynamicResource ChromeBorder}" />
+                            <Button x:Name="DrawerUpButton" DockPanel.Dock="Right" Content="↑" Width="24"
+                                    ToolTip="上一级目录" FontSize="13" Margin="2,0" Padding="0" Click="OnDrawerUpClick"
+                                    Foreground="{DynamicResource ChromeFg}" Background="Transparent"
+                                    BorderBrush="{DynamicResource ChromeBorder}" />
+                            <TextBlock x:Name="DrawerRootText" Text="文件" FontSize="12" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ChromeFg}" />
+                        </DockPanel>
+                    </Border>
+                    <TreeView x:Name="DrawerTree" BorderThickness="0" Background="Transparent"
+                              Foreground="{DynamicResource ChromeFg}"
+                              FontSize="12" Padding="2,4" MouseDoubleClick="OnDrawerDoubleClick" />
+                </DockPanel>
             </Border>
+
+            <GridSplitter x:Name="DrawerSplitter" Grid.Column="1" Width="4" HorizontalAlignment="Stretch"
+                          Background="Transparent" ResizeBehavior="PreviousAndNext" Visibility="Collapsed"
+                          DragCompleted="OnDrawerSplitterDragCompleted" />
+
+            <Grid Grid.Column="2">
+                <wv2:WebView2 x:Name="Web" />
+                <Border x:Name="Overlay" Background="{DynamicResource PageBg}">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock x:Name="OverlayText" Text="正在加载编辑器…" FontSize="14"
+                                   Foreground="{DynamicResource MutedFg}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </DockPanel>
 </Window>

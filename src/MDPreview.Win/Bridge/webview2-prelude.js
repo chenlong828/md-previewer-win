@@ -68,4 +68,50 @@
         event.stopPropagation();
         window.chrome.webview.postMessage(JSON.stringify({ __host: 'shortcut', key: name }));
     }, true);
+    // 拖入图片文件：Chromium 不会把文件路径交给页面（安全），但读得到字节，
+    // 因此这里取 files[] → base64 → 宿主消息，落盘与插入由壳完成（磁盘写入只在壳）。
+    function readBase64(file) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function () {
+                var bytes = new Uint8Array(reader.result);
+                var bin = '';
+                var chunk = 0x8000;
+                for (var i = 0; i < bytes.length; i += chunk) {
+                    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+                }
+                resolve(btoa(bin));
+            };
+            reader.onerror = function () { reject(reader.error); };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function imageFiles(dataTransfer) {
+        var files = (dataTransfer && dataTransfer.files) ? Array.prototype.slice.call(dataTransfer.files) : [];
+        return files.filter(function (f) { return f && f.type && f.type.indexOf('image/') === 0; });
+    }
+
+    window.addEventListener('dragover', function (event) {
+        if (!imageFiles(event.dataTransfer).length) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+    }, true);
+
+    window.addEventListener('drop', function (event) {
+        if (event.target && event.target.closest && event.target.closest('.md-image')) return; // 图片块自身的编辑态交给页面
+        var images = imageFiles(event.dataTransfer);
+        if (!images.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        images.forEach(function (file) {
+            readBase64(file).then(function (data) {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    __host: 'dropImage', mime: file.type || '', name: file.name || '', data: data
+                }));
+            }).catch(function (e) {
+                console.error('mdpreview: read dropped image failed: ' + (e && e.message ? e.message : e));
+            });
+        });
+    }, true);
 })();

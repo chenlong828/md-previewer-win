@@ -34,6 +34,9 @@ public sealed class KernelClient
     /// <summary>前导脚本转来的壳级快捷键（save/open/zoomIn…）。</summary>
     public event Action<string>? Shortcut;
 
+    /// <summary>页面里拖入图片文件（基址 + mime）；壳负责落盘与插入。</summary>
+    public event Action<string, string>? DroppedImage;
+
     /// <summary>握手结果：kernelVersion / protocolVersion / ops[]。</summary>
     public JsonObject? Handshake { get; private set; }
 
@@ -115,10 +118,19 @@ public sealed class KernelClient
         }
         if (frame is null) return;
 
-        if (frame["__host"] is JsonValue hostValue && hostValue.TryGetValue<string>(out var host) && host == "shortcut")
+        if (frame["__host"] is JsonValue hostValue && hostValue.TryGetValue<string>(out var host))
         {
-            Shortcut?.Invoke(frame["key"]?.GetValue<string>() ?? "");
-            return;
+            switch (host)
+            {
+                case "shortcut":
+                    Shortcut?.Invoke(frame["key"]?.GetValue<string>() ?? "");
+                    return;
+                case "dropImage":
+                    DroppedImage?.Invoke(
+                        frame["mime"]?.GetValue<string>() ?? "",
+                        frame["data"]?.GetValue<string>() ?? "");
+                    return;
+            }
         }
 
         if (frame["v"]?.GetValue<int>() != ProtocolVersion)

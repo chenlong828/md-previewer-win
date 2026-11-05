@@ -79,7 +79,8 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | `CMP-app-shell` | 窗口、菜单、最近文件、单实例、主题/缩放、缩略图偏好 |
 | `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、同源资源前缀、CSP、上下文菜单 |
 | `CMP-document-io` | 读写、编码检测、原子写、尾换行、外部修改监听 |
-| `CMP-drawer`（M2） | 目录树抽屉、懒加载、宽度拖拽 |
+| `CMP-drawer` | 目录树抽屉：根=文档目录、懒加载、上级/用户目录切换、宽度拖拽、双击开新窗口 |
+| `CMP-image-store` | 图片落盘：`resource/<文档名>/`、`img_NNN` 序号命名、原名冲突加序号、关闭时 GC |
 | `CMP-export`（M3） | PDF/HTML/打印 |
 | `CMP-code-view`（M3） | 代码只读视图（语言/行号） |
 | `CMP-diagnostics`（M3） | 自检、截图、日志 |
@@ -154,6 +155,12 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 - 编码：BOM 优先；无 BOM 先 UTF-8 严格解码，失败退 GB18030；保存沿用打开时的编码与 BOM。
 - 写入：同目录临时文件 + `File.Replace`/`MoveFileEx`，失败保留原文件；保存后统一尾换行。
+- 图片落盘：`<文档目录>/resource/<文档名去扩展>/`（对齐上游 ImageStore），剪贴板位图
+  `img_NNN.ext`、既有文件保留原名（冲突 `-2`）；关闭时按内核 `getResourceRefs` 的引用集合
+  做 GC，只删图片、空目录逐级回收。
+- 图片粘贴/拖入：内核 `paste` 识别 → `importImage` 请求（blob=base64 / file=路径）→ 壳落盘
+  并回传同源资源 URL → 内核 `insertImage`；拖入的文件路径 Chromium 不交给页面，故由前导脚本
+  读字节后发宿主消息（`__host:'dropImage'`），仍由壳写盘。
 - 路径：`\\?\` 长路径、UNC、大小写不敏感比较；比较一律 `OrdinalIgnoreCase`。
 - 外部修改：`FileSystemWatcher` + 窗口激活时二次校验（mtime/size），不静默覆盖。
 - 关联：`HKCU\Software\Classes\.md`（M4 随安装包）。
@@ -167,8 +174,8 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 多窗口、最近文件、外部修改 | 同构 | M1 |
 | 主题（跟系统）、缩放 | 同构 | M1 |
 | 右侧文档缩略图（Markdown/代码） | 内核自带，壳给偏好与菜单 | M1（Markdown）/ M3（代码面） |
-| 图片显示、粘贴/拖放导入、GC | 同构（同源资源前缀 + 壳落盘） | M2 |
-| 文件抽屉、目录模式 | 同构 | M2 |
+| 图片显示、粘贴/拖放导入、GC | 同构（同源资源前缀 + 壳落盘） | M2 ✅ |
+| 文件抽屉、目录模式 | 同构（懒加载目录树 + 上级/用户目录） | M2 ✅ |
 | 代码只读视图、行号、语言切换 | 同构 | M3 |
 | 查找、源码模式 | 同构 | M1 接线 / M3 验收 |
 | PDF/HTML/打印 | `PrintToPdfAsync` + 内核导出 | M3 |
