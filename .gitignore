@@ -30,3 +30,7 @@ coverage/
 # 运行期本地数据（本机调试用）
 .appdata/
 *.out.log
+
+# 本机验收用的临时用户数据目录（WebView2 profile 会带一堆缓存）
+.appdata-fresh/
+.appdata*/
