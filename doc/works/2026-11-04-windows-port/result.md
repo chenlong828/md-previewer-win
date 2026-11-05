@@ -102,9 +102,48 @@ image dropped img_001.png      （拖入路径复用同一落盘/插入链路）
   代码视图一起补。
 - 抽屉不自动 rescan（切回窗口不重建树），靠重新打开或切根刷新；上游是激活即 rescan。
 
-## 7. 下一步（M3）
+## 7. M3 结果：代码视图 + 导出 + 诊断（2026-11-05）
 
-1. 代码只读视图（44 语言 / 行号 / 缩略图）与语言表单一来源 `resources/languages.json`；
-2. 右侧缩略图验收（暗色首屏底色）与折叠交互；
-3. 查找栏与源码模式验收；PDF/HTML/打印（`PrintToPdfAsync` + 内核导出）；
-4. 诊断子命令（自检/截图/日志），并可复用本轮临时探针的「合成粘贴/拖放」思路。
+### 7.1 交付
+
+| 区域 | 文件 | 说明 |
+|---|---|---|
+| 语言表 | `resources/languages.json`、`Io/CodeLanguages.cs` | 44 门语言/78 扩展名，单一来源；壳只做扩展名 → id |
+| 语言表门 | `tools/check-languages.mjs`、`build.ps1` | 每个 id 必须能被内核 refractor 高亮，扩展名/展示名不重复 |
+| 代码文档 | `DocumentWindow.LoadCodeAsync` | 非 Markdown 扩展名走 `setCode`，等 `ready` 再送（早送会被内核拒），只读、不写盘、不产生脏标记 |
+| 大文件降级 | 同上 | UTF-8 字节 > 2 MB → `plaintext`，状态栏与日志标注 |
+| 导出 | `ExportPdfAsync` / `ExportHtmlAsync` | PDF 走 `PrintToPdfAsync`（背景开、页边距 0.4"、无页眉页脚）；HTML 走内核 `exportStandaloneHTML` |
+| 诊断 | `--diag info/code/state/export-html/export-pdf` | 无界面自检，stdout + 退出码，远程/锁屏也能验收 |
+| 菜单 | 文件 → 导出 PDF/HTML；视图 → 代码语言 | 语言项按当前扩展名打勾 |
+
+### 7.2 验收证据（`--diag`，无界面）
+
+```
+--diag info        languages 44   web=...\web (kernel=True)
+--diag code a.cs   {"mode":true,"language":"csharp","allowHighlight":true,"textLength":7558,
+                    "lineCount":208,"tokenCount":1147,"lineNumbers":true}
+                   minimap={"surface":"code","visible":true,"mode":"fit","scale":0.1395,"snapshotCount":1}
+--diag state a.md  state={"ready":true,"sourceMode":false,"codeMode":false,"theme":"dark",...}
+                   source on {"sourceMode":true} / source off {"sourceMode":false}
+                   find open {"ok":true} / find after {"active":true,"query":"","count":0} / close ok
+--diag export-html html bytes=45839，正文 <h1 id="">拖入测试</h1><p>正文。</p>
+--diag export-pdf  pdf ok=True，17 579 字节，%PDF-1.4，1 页
+```
+
+- 代码视图真实渲染了 208 行 / 1147 个高亮 token，行号开；代码面缩略图 `surface:code` 生效。
+- 源码模式双向切换、查找栏开/关都拿到内核回执；查找匹配数由内核套件覆盖（`find` 19 项）。
+- 单元测试 43 项全绿（新增 CodeLanguages 5 + 3 theory）。
+
+### 7.3 取舍
+
+- 「打印」走系统打印对话框（内核 `print` → `window.print()`）未单独做，PDF 导出覆盖了
+  主要用途；如需要再补菜单项。
+- 导出的 HTML 里图片 `src` 仍是内核当前的资源 URL 形态，跨机器分发前应先保存一次
+  （`getSaveMarkdown` 会把图片还原成相对路径）——与上游行为一致，未额外改写。
+
+## 8. 下一步（M4）
+
+1. 便携 zip：`dist/MDPreview` 打 zip、校验解压即用（绿色语义 + `portable.flag`）；
+2. `HKCU\Software\Classes` 的 `.md` 关联（写入/撤销/管理员不需要）；
+3. 应用图标（ico + 窗口/任务栏/exe 资源）；
+4. Win10 1809 实机验证（WebView2 Runtime 检测与提示）。

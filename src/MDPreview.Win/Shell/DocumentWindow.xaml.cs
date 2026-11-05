@@ -7,6 +7,7 @@ using System.Windows.Media;
 using MDPreview.Win.Bridge;
 using MDPreview.Win.Io;
 using MDPreview.Win.Settings;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 
 namespace MDPreview.Win.Shell;
@@ -35,9 +36,23 @@ public partial class DocumentWindow : Window
     readonly MenuItem _sourceMenu = new() { Header = "源码模式", IsCheckable = true };
     readonly MenuItem _minimapMenu = new() { Header = "显示文档缩略图", IsCheckable = true };
     readonly MenuItem _drawerMenu = new() { Header = "文件抽屉", IsCheckable = true };
+    readonly MenuItem _languageMenu = new() { Header = "代码语言" };
 
     static readonly object DrawerPlaceholder = new();
     string? _drawerRoot;
+
+    /// <summary>超过该字节数的代码文件不启用语法高亮（纯文本渲染，避免卡顿）。</summary>
+    const long CodeHighlightByteLimit = 2_000_000;
+
+    static readonly HashSet<string> MarkdownExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".md", ".markdown", ".mdown", ".mkd", ".mdx", ".txt", ".text",
+    };
+
+    /// <summary>代码文件 = 非 Markdown 的可开文件；只读视图，不写盘。</summary>
+    bool IsCodeDocument => _path is not null && !MarkdownExtensions.Contains(Path.GetExtension(_path));
+    bool _codeHighlightAllowed = true;
+    bool _codeLoaded;
 
     public DocumentWindow(AppSettings settings, string? path = null)
     {
@@ -94,9 +109,11 @@ public partial class DocumentWindow : Window
     /// <summary>首篇文档必须随 init 一起送入：init 是 ready 之前唯一允许的 op。</summary>
     async Task OpenInitialAsync(string path)
     {
+        var isCode = !MarkdownExtensions.Contains(Path.GetExtension(path));
         var doc = TextFile.Read(path);
         _doc = doc;
-        await SendInitAsync(doc.Text, path);
+        _codeLoaded = false;
+        await SendInitAsync(isCode ? "" : doc.Text, path);
         _lastWriteUtc = File.GetLastWriteTimeUtc(path);
         _settings.AddRecent(path);
         UpdateTitle();
@@ -134,6 +151,51 @@ public partial class DocumentWindow : Window
         if (_settings.DrawerVisible) LoadDrawerRoot();
     }
 
+    /// <summary>
+    /// 代码文件装载：只读高亮视图（不进 ProseMirror、不产生脏基线与 changed）。
+    /// 超过字节上限的文件降级纯文本，状态栏标注「纯文本」。
+    /// </summary>
+    async Task LoadCodeAsync(string path)
+    {
+        if (_kernel is null) return;
+        var doc = TextFile.Read(path);
+        _doc = doc;
+        _path = path;
+
+        var language = CodeLanguages.IdForPath(path);
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(doc.Text);
+        _codeHighlightAllowed = bytes <= CodeHighlightByteLimit;
+        if (!_codeHighlightAllowed) language = CodeLanguages.PlainText;
+
+        await _kernel.SendAsync("setCode", new JsonObject
+        {
+            ["text"] = doc.Text,
+            ["language"] = language,
+            ["allowHighlight"] = _codeHighlightAllowed,
+            ["lineNumbers"] = _settings.CodeLineNumbers,
+        }, TimeSpan.FromSeconds(20));
+
+        var lines = doc.Text.Length == 0 ? 0 : doc.Text.Split('\n').Length;
+        StatsText.Text = $"{lines} 行 · {doc.Text.Length} 字符";
+        _codeLoaded = true;
+        _dirty = false;
+        UpdateTitle();
+        UpdateState();
+
+        // 自检用一行：代码视图的真实渲染结果（行数/语言/是否高亮）进日志，便于无界面核验
+        try
+        {
+            var info = await _kernel.SendAsync("codeInfo", null, TimeSpan.FromSeconds(5));
+            Log.Info($"code view {info?.ToJsonString()}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("codeInfo failed: " + ex.Message);
+        }
+
+        Log.Info($"opened code {path} language={language} highlight={_codeHighlightAllowed}");
+    }
+
     // ---------------------------------------------------------------- 打开 / 保存
 
     public async Task OpenPathAsync(string path)
@@ -147,6 +209,16 @@ public partial class DocumentWindow : Window
 
         try
         {
+            if (!MarkdownExtensions.Contains(Path.GetExtension(path)))
+            {
+                await LoadCodeAsync(path);
+                _settings.AddRecent(path);
+                UpdateRecentMenu();
+                StartWatcher(path);
+                if (_settings.DrawerVisible) LoadDrawerRoot();
+                return;
+            }
+
             var doc = TextFile.Read(path);
             _doc = doc;
             _path = path;
@@ -186,6 +258,12 @@ public partial class DocumentWindow : Window
     async Task SaveAsync(bool saveAs)
     {
         if (_kernel is null) return;
+        if (IsCodeDocument)
+        {
+            MessageBox.Show(this, "代码文件是只读视图，不写回磁盘。", Product,
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
 
         var target = _path;
         if (target is null || saveAs)
@@ -240,6 +318,8 @@ public partial class DocumentWindow : Window
                 Overlay.Visibility = Visibility.Collapsed;
                 UpdateState();
                 Log.Info($"kernel ready protocol={payload["protocolVersion"]}");
+                // 代码视图要等 ready：setCode 在 ready 之前一律返回 ok:false（内核契约）
+                if (!_codeLoaded && _path is not null && IsCodeDocument) _ = LoadCodeAsync(_path);
                 break;
             case "changed":
                 _dirty = payload["dirty"]?.GetValue<bool>() ?? false;
@@ -605,6 +685,198 @@ public partial class DocumentWindow : Window
         }
     }
 
+    // ---------------------------------------------------------------- 诊断入口（--diag）
+
+    /// <summary>等内核 ready 且首篇文档装载完成（诊断子命令用，最多 ~30 s）。</summary>
+    public async Task WaitReadyAsync()
+    {
+        for (var i = 0; i < 300 && !_ready; i++) await Task.Delay(100);
+        for (var i = 0; i < 100 && IsCodeDocument && !_codeLoaded; i++) await Task.Delay(100);
+        await Task.Delay(200);
+    }
+
+    public async Task<string> DiagCodeInfoAsync()
+    {
+        if (_kernel is null) return "{}";
+        var info = await _kernel.SendAsync("codeInfo", null, TimeSpan.FromSeconds(10));
+        var minimap = await _kernel.SendAsync("minimapInfo", null, TimeSpan.FromSeconds(5));
+        return $"{info?.ToJsonString() ?? "{}"}\nminimap={minimap?.ToJsonString() ?? "{}"}";
+    }
+
+    /// <summary>会话自检：状态 / 缩略图 / 源码模式往返 / 查找栏往返。</summary>
+    public async Task<string> DiagStateAsync()
+    {
+        if (_kernel is null) return "{}";
+        var lines = new List<string>();
+        async Task<string> Op(string op, JsonObject? payload = null)
+        {
+            var answer = await _kernel.SendAsync(op, payload, TimeSpan.FromSeconds(10));
+            return answer?.ToJsonString() ?? "{}";
+        }
+
+        lines.Add("state      " + await Op("getState"));
+        lines.Add("minimap    " + await Op("minimapInfo"));
+        lines.Add("findInfo   " + await Op("findInfo"));
+
+        if (!IsCodeDocument)
+        {
+            lines.Add("source on  " + await Op("toggleSource"));
+            lines.Add("source off " + await Op("toggleSource"));
+            lines.Add("find open  " + await Op("openFindBar"));
+            lines.Add("find after " + await Op("findInfo"));
+            lines.Add("find close " + await Op("closeFindBar"));
+        }
+        return string.Join('\n', lines);
+    }
+
+    public async Task<int> DiagExportHtmlAsync(string target)
+    {
+        if (_kernel is null) return 0;
+        var answer = await _kernel.SendAsync("exportStandaloneHTML", null, TimeSpan.FromSeconds(30));
+        var html = answer?["html"]?.GetValue<string>() ?? "";
+        await File.WriteAllTextAsync(target, html, new System.Text.UTF8Encoding(false));
+        Log.Info($"diag exported html {target} bytes={html.Length}");
+        return html.Length;
+    }
+
+    public async Task<bool> DiagExportPdfAsync(string target)
+    {
+        if (Web.CoreWebView2 is null) return false;
+        var settings = Web.CoreWebView2.Environment.CreatePrintSettings();
+        settings.ShouldPrintBackgrounds = true;
+        settings.ShouldPrintHeaderAndFooter = false;
+        settings.MarginTop = 0.4; settings.MarginBottom = 0.4;
+        settings.MarginLeft = 0.4; settings.MarginRight = 0.4;
+        var ok = await Web.CoreWebView2.PrintToPdfAsync(target, settings);
+        Log.Info($"diag exported pdf {target} ok={ok}");
+        return ok;
+    }
+
+    // ---------------------------------------------------------------- 导出
+
+    /// <summary>导出 PDF：直接用 WebView2 的打印到 PDF（所见即所得，含图片与公式）。</summary>
+    async Task ExportPdfAsync()
+    {
+        if (_kernel is null || Web.CoreWebView2 is null) return;
+        if (IsCodeDocument)
+        {
+            MessageBox.Show(this, "代码文件不提供 PDF 导出。", Product, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出 PDF",
+            Filter = "PDF 文件 (*.pdf)|*.pdf",
+            FileName = (_path is null ? "未命名" : Path.GetFileNameWithoutExtension(_path)) + ".pdf",
+            InitialDirectory = _path is null ? _settings.LastFolder : Path.GetDirectoryName(_path),
+            DefaultExt = ".pdf",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var settings = Web.CoreWebView2.Environment.CreatePrintSettings();
+            settings.ShouldPrintBackgrounds = true;
+            settings.ShouldPrintHeaderAndFooter = false;
+            settings.MarginTop = 0.4; settings.MarginBottom = 0.4;
+            settings.MarginLeft = 0.4; settings.MarginRight = 0.4;
+
+            var result = await Web.CoreWebView2.PrintToPdfAsync(dialog.FileName, settings);
+            if (result) Log.Info("exported pdf " + dialog.FileName);
+            else MessageBox.Show(this, "PDF 导出被取消或失败。", Product, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("pdf export failed", ex);
+            MessageBox.Show(this, "PDF 导出失败：" + ex.Message, Product, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>导出单文件 HTML：样式由内核内联，图片保持相对路径（与 Markdown 同目录布局一致）。</summary>
+    async Task ExportHtmlAsync()
+    {
+        if (_kernel is null) return;
+        if (IsCodeDocument)
+        {
+            MessageBox.Show(this, "代码文件不提供 HTML 导出。", Product, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出 HTML",
+            Filter = "HTML 文件 (*.html)|*.html",
+            FileName = (_path is null ? "未命名" : Path.GetFileNameWithoutExtension(_path)) + ".html",
+            InitialDirectory = _path is null ? _settings.LastFolder : Path.GetDirectoryName(_path),
+            DefaultExt = ".html",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var answer = await _kernel.SendAsync("exportStandaloneHTML", null, TimeSpan.FromSeconds(20));
+            var html = answer?["html"]?.GetValue<string>() ?? "";
+            if (html.Length == 0)
+            {
+                MessageBox.Show(this, "HTML 导出失败（内核返回空内容）。", Product, MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            await File.WriteAllTextAsync(dialog.FileName, html, new System.Text.UTF8Encoding(false));
+            Log.Info("exported html " + dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("html export failed", ex);
+            MessageBox.Show(this, "HTML 导出失败：" + ex.Message, Product, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // ---------------------------------------------------------------- 代码语言
+
+    void BuildLanguageMenu(MenuItem parent)
+    {
+        parent.Items.Clear();
+        var plain = new MenuItem { Header = "纯文本", IsCheckable = true };
+        plain.Click += (_, _) => _ = SetCodeLanguageAsync(CodeLanguages.PlainText);
+        parent.Items.Add(plain);
+        parent.Items.Add(new Separator());
+
+        foreach (var language in CodeLanguages.All)
+        {
+            var id = language.Id;
+            var item = new MenuItem { Header = language.DisplayName, IsCheckable = true };
+            item.Click += (_, _) => _ = SetCodeLanguageAsync(id);
+            parent.Items.Add(item);
+        }
+        if (CodeLanguages.All.Count == 0)
+            parent.Items.Add(new MenuItem { Header = "（languages.json 缺失）", IsEnabled = false });
+    }
+
+    async Task SetCodeLanguageAsync(string id)
+    {
+        if (_kernel is null || !IsCodeDocument) return;
+        try
+        {
+            await _kernel.SendAsync("setCodeLanguage", new JsonObject { ["id"] = id });
+            Log.Info($"code language -> {id}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("set code language failed: " + ex.Message);
+        }
+    }
+
+    void UpdateLanguageMenuChecks()
+    {
+        var current = _path is null ? CodeLanguages.PlainText : CodeLanguages.IdForPath(_path);
+        foreach (var item in _languageMenu.Items.OfType<MenuItem>())
+        {
+            var header = item.Header as string;
+            item.IsChecked = header == CodeLanguages.DisplayName(current);
+        }
+    }
+
     async Task RunOpAsync(string op, JsonObject? payload = null)
     {
         if (_kernel is null) return;
@@ -720,6 +992,13 @@ public partial class DocumentWindow : Window
         if (_kernel is null) return;
         try
         {
+            if (!MarkdownExtensions.Contains(Path.GetExtension(path)))
+            {
+                await LoadCodeAsync(path);
+                UpdateTitle();
+                return;
+            }
+
             var doc = TextFile.Read(path);
             _doc = doc;
             await _kernel.SendAsync("setMarkdown", new JsonObject
@@ -780,6 +1059,11 @@ public partial class DocumentWindow : Window
 
     void UpdateState()
     {
+        if (IsCodeDocument && _ready)
+        {
+            StateText.Text = _path is null ? "只读" : "只读 · " + Path.GetFileName(_path);
+            return;
+        }
         StateText.Text = !_ready ? "加载中…" : _dirty ? "未保存" : "已保存";
         if (_path is not null) StateText.Text += " · " + Path.GetFileName(_path);
     }
@@ -822,6 +1106,9 @@ public partial class DocumentWindow : Window
         file.Items.Add(Item("保存", (_, _) => _ = SaveAsync(false), "Ctrl+S"));
         file.Items.Add(Item("另存为…", (_, _) => _ = SaveAsync(true), "Ctrl+Shift+S"));
         file.Items.Add(new Separator());
+        file.Items.Add(Item("导出 PDF…", (_, _) => _ = ExportPdfAsync()));
+        file.Items.Add(Item("导出 HTML…", (_, _) => _ = ExportHtmlAsync()));
+        file.Items.Add(new Separator());
         file.Items.Add(Item("关闭窗口", (_, _) => _ = CloseWindowAsync(), "Ctrl+W"));
         file.Items.Add(Item("退出", (_, _) => App.Current.ShutdownApp()));
 
@@ -850,6 +1137,9 @@ public partial class DocumentWindow : Window
         view.Items.Add(_minimapMenu);
         _drawerMenu.Click += (_, _) => ToggleDrawer();
         view.Items.Add(_drawerMenu);
+        BuildLanguageMenu(_languageMenu);
+        _languageMenu.SubmenuOpened += (_, _) => UpdateLanguageMenuChecks();
+        view.Items.Add(_languageMenu);
 
         var help = new MenuItem { Header = "帮助(_H)" };
         help.Items.Add(Item("打开日志目录", (_, _) =>

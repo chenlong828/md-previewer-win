@@ -62,6 +62,10 @@ if (-not $SkipKernel) {
             }
         }
         if ($failed -gt 0) { throw "$failed 个内核测试套件失败" }
+
+        Step '语言表门：resources/languages.json 与内核语法一致'
+        & $node 'tools\check-languages.mjs' 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) { throw "check-languages 失败（$LASTEXITCODE）" }
     }
 
     if (-not (Test-Path (Join-Path $root 'kernel\node_modules'))) {

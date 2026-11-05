@@ -38,6 +38,9 @@ public static class AppInfo
     /// <summary>内核产物目录（kernel/dist → 输出目录 web/）。</summary>
     public static string WebDirectory { get; } = Path.Combine(BaseDirectory, "web");
 
+    /// <summary>随包的静态数据目录（`languages.json` 等单一来源清单）。</summary>
+    public static string ResourcesDirectory { get; } = Path.Combine(BaseDirectory, "resources");
+
     public static string SettingsPath { get; } = Path.Combine(UserDataDirectory, "settings.json");
 
     public static string LogPath { get; } = Path.Combine(UserDataDirectory, "mdpreview.log");

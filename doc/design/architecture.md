@@ -81,9 +81,9 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | `CMP-document-io` | 读写、编码检测、原子写、尾换行、外部修改监听 |
 | `CMP-drawer` | 目录树抽屉：根=文档目录、懒加载、上级/用户目录切换、宽度拖拽、双击开新窗口 |
 | `CMP-image-store` | 图片落盘：`resource/<文档名>/`、`img_NNN` 序号命名、原名冲突加序号、关闭时 GC |
-| `CMP-export`（M3） | PDF/HTML/打印 |
-| `CMP-code-view`（M3） | 代码只读视图（语言/行号） |
-| `CMP-diagnostics`（M3） | 自检、截图、日志 |
+| `CMP-code-view` | 代码只读视图：`resources/languages.json` 扩展名 → 语言 id、行号、>2 MB 降级纯文本、不写盘 |
+| `CMP-export` | 导出 PDF（`PrintToPdfAsync`，背景/页边距）与单文件 HTML（内核 `exportStandaloneHTML`） |
+| `CMP-diagnostics` | `--diag info/code/state/export-html/export-pdf`：无界面自检，结果走 stdout，退出码 0/1 |
 
 内核（`kernel/`，vendor，不改结构）：
 
@@ -173,13 +173,17 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 打开/编辑/保存、脏标记、另存 | 同构 | M1 |
 | 多窗口、最近文件、外部修改 | 同构 | M1 |
 | 主题（跟系统）、缩放 | 同构 | M1 |
-| 右侧文档缩略图（Markdown/代码） | 内核自带，壳给偏好与菜单 | M1（Markdown）/ M3（代码面） |
+| 右侧文档缩略图（Markdown/代码） | 内核自带，壳给偏好与菜单 | M1（Markdown）/ M3 ✅（代码面 `minimapInfo` 印证 `surface:code`） |
 | 图片显示、粘贴/拖放导入、GC | 同构（同源资源前缀 + 壳落盘） | M2 ✅ |
 | 文件抽屉、目录模式 | 同构（懒加载目录树 + 上级/用户目录） | M2 ✅ |
-| 代码只读视图、行号、语言切换 | 同构 | M3 |
-| 查找、源码模式 | 同构 | M1 接线 / M3 验收 |
-| PDF/HTML/打印 | `PrintToPdfAsync` + 内核导出 | M3 |
-| 诊断（自检/截图/日志） | 子命令 | M3 |
+| 代码只读视图、行号、语言切换 | 同构（44 语言表 + 只读、不写盘、>2 MB 降级） | M3 ✅ |
+| 查找、源码模式 | 同构（`openFindBar`/`findInfo`、`toggleSource` 往返自检） | M3 ✅ |
+| PDF/HTML/打印 | `PrintToPdfAsync` + 内核 `exportStandaloneHTML` | M3 ✅ |
+| 诊断（自检/截图/日志） | `--diag info/code/state/export-html/export-pdf` | M3 ✅ |
+
+> 自检样例：`MDPreview.exe --diag state <file.md>`、`--diag code <file.cs>`、
+> `--diag export-html <src.md> <out.html>`、`--diag export-pdf <src.md> <out.pdf>`；
+> 结果写 stdout，退出码 0=成功。适合无桌面（远程/CI）时验收。
 
 ## 9. 构建与分发
 

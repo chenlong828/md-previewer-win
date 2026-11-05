@@ -39,6 +39,12 @@ public partial class App : Application
         base.OnStartup(e);
         Log.Info($"start v{typeof(App).Assembly.GetName().Version} args=[{string.Join(' ', e.Args)}]");
 
+        if (e.Args.Length > 1 && e.Args[0] == "--diag")
+        {
+            RunDiagnostics(e.Args.Skip(1).ToArray());
+            return;
+        }
+
         var path = e.Args.FirstOrDefault(arg => !arg.StartsWith('-'));
 
         _instanceMutex = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
@@ -53,8 +59,88 @@ public partial class App : Application
         OpenDocument(path);
     }
 
-    public void OpenDocument(string? path)
+    // ---------------------------------------------------------------- 诊断子命令
+    //
+    //   MDPreview.exe --diag info
+    //   MDPreview.exe --diag code <源文件>
+    //   MDPreview.exe --diag export-html <源文件> <目标.html>
+    //   MDPreview.exe --diag export-pdf  <源文件> <目标.pdf>
+    //
+    // 结果写 stdout（WinExe 无控制台，但重定向到文件可用），退出码 0=成功、1=失败。
+
+    void RunDiagnostics(string[] args)
     {
+        var sub = args.FirstOrDefault() ?? "info";
+        if (sub == "info")
+        {
+            Console.WriteLine($"app        {typeof(App).Assembly.GetName().Version}");
+            Console.WriteLine($"protocol   {AppInfo.ProtocolVersion}");
+            Console.WriteLine($"base       {AppInfo.BaseDirectory}");
+            Console.WriteLine($"userdata   {AppInfo.UserDataDirectory}");
+            Console.WriteLine($"web        {AppInfo.WebDirectory} (kernel={AppInfo.HasKernel})");
+            Console.WriteLine($"languages  {MDPreview.Win.Io.CodeLanguages.All.Count}");
+            Console.WriteLine($"log        {AppInfo.LogPath}");
+            Shutdown(0);
+            return;
+        }
+
+        var source = args.ElementAtOrDefault(1);
+        var target = args.ElementAtOrDefault(2);
+        if (source is null || !File.Exists(source))
+        {
+            Console.WriteLine($"missing source file: {source}");
+            Shutdown(1);
+            return;
+        }
+
+        _ = RunWindowDiagnosticsAsync(sub, source, target);
+    }
+
+    async Task RunWindowDiagnosticsAsync(string sub, string source, string? target)
+    {
+        var window = new DocumentWindow(_settings, source);
+        var exitCode = 1;
+        try
+        {
+            window.Show();
+            await window.WaitReadyAsync();
+
+            switch (sub)
+            {
+                case "code":
+                    Console.WriteLine(await window.DiagCodeInfoAsync());
+                    exitCode = 0;
+                    break;
+                case "state":
+                    Console.WriteLine(await window.DiagStateAsync());
+                    exitCode = 0;
+                    break;
+                case "export-html" when target is not null:
+                    Console.WriteLine($"html bytes={await window.DiagExportHtmlAsync(target)} file={target}");
+                    exitCode = 0;
+                    break;
+                case "export-pdf" when target is not null:
+                    Console.WriteLine($"pdf ok={await window.DiagExportPdfAsync(target)} file={target}");
+                    exitCode = 0;
+                    break;
+                default:
+                    Console.WriteLine($"unknown diag command: {sub}");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("diag failed: " + ex.Message);
+            Log.Error("diag failed", ex);
+        }
+        finally
+        {
+            window.Close();
+            Shutdown(exitCode);
+        }
+    }
+
+    public void OpenDocument(string? path)    {
         var window = new DocumentWindow(_settings, path);
         window.Closed += (_, _) =>
         {
