@@ -19,7 +19,7 @@
 | M1 垂直切片 | 内核 vendor + 桥 + WebView2 宿主 + 文档 IO + 壳骨架 + 打包 | ✅ 2026-11-05 |
 | M2 浏览与媒体 | 文件抽屉、图片粘贴/拖放、导入 GC | ✅ 2026-11-05 |
 | M3 阅读与输出 | 代码视图（44 语言）、导出 PDF/HTML、诊断子命令 | ✅ 2026-11-05 |
-| M4 分发 | 便携 zip、文件关联、图标 | ⏳ |
+| M4 分发 | 便携 zip、文件关联、图标 | ✅ 2026-11-05 |
 
 ## 架构
 
@@ -52,6 +52,18 @@ dist/MDPreview/MDPreview.exe samples/功能演示.md
 
 `dist/MDPreview/` 是**绿色目录**：整体拷贝即可运行，`portable.flag` 存在时用户数据
 （设置/日志/WebView2 配置）写在 `exe/data/` 下，不污染 `%APPDATA%`。
+
+```powershell
+# 分发：build.ps1 会打 dist/MDPreview-<version>-win-x64-portable.zip，并解压自检一遍
+# 文件关联（HKCU，无需管理员；安装前备份原默认值，可完整撤销）
+powershell -NoProfile -File tools/associate.ps1 -Install -Exe dist/MDPreview/MDPreview.exe
+powershell -NoProfile -File tools/associate.ps1 -Status
+powershell -NoProfile -File tools/associate.ps1 -Uninstall
+# 无界面自检（锁屏/远程/CI 都能用）
+dist/MDPreview/MDPreview.exe --diag info
+dist/MDPreview/MDPreview.exe --diag code src/MDPreview.Win/App.xaml.cs
+dist/MDPreview/MDPreview.exe --diag export-pdf samples/功能演示.md out.pdf
+```
 
 ## 文档
 

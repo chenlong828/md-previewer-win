@@ -45,6 +45,19 @@ public partial class App : Application
             return;
         }
 
+        switch (e.Args.FirstOrDefault())
+        {
+            case "--install-association":
+                RunAssociation(args => Io.FileAssociation.Install(), 0);
+                return;
+            case "--uninstall-association":
+                RunAssociation(_ => Io.FileAssociation.Uninstall(), 0);
+                return;
+            case "--association-status":
+                RunAssociation(_ => Io.FileAssociation.Status(), 0);
+                return;
+        }
+
         var path = e.Args.FirstOrDefault(arg => !arg.StartsWith('-'));
 
         _instanceMutex = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
@@ -57,6 +70,21 @@ public partial class App : Application
 
         StartPipeServer();
         OpenDocument(path);
+    }
+
+    void RunAssociation(Func<string[], IReadOnlyList<string>> action, int successCode)
+    {
+        try
+        {
+            foreach (var line in action(Environment.GetCommandLineArgs())) Console.WriteLine(line);
+            Shutdown(successCode);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("association failed: " + ex.Message);
+            Log.Error("association failed", ex);
+            Shutdown(1);
+        }
     }
 
     // ---------------------------------------------------------------- 诊断子命令
@@ -79,6 +107,7 @@ public partial class App : Application
             Console.WriteLine($"userdata   {AppInfo.UserDataDirectory}");
             Console.WriteLine($"web        {AppInfo.WebDirectory} (kernel={AppInfo.HasKernel})");
             Console.WriteLine($"languages  {MDPreview.Win.Io.CodeLanguages.All.Count}");
+            Console.WriteLine($"assoc      {(MDPreview.Win.Io.FileAssociation.IsInstalled ? "installed" : "not installed")}");
             Console.WriteLine($"log        {AppInfo.LogPath}");
             Shutdown(0);
             return;

@@ -180,6 +180,9 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 查找、源码模式 | 同构（`openFindBar`/`findInfo`、`toggleSource` 往返自检） | M3 ✅ |
 | PDF/HTML/打印 | `PrintToPdfAsync` + 内核 `exportStandaloneHTML` | M3 ✅ |
 | 诊断（自检/截图/日志） | `--diag info/code/state/export-html/export-pdf` | M3 ✅ |
+| 绿色分发 | `dist/MDPreview/` + 便携 zip（打包即自检） | M4 ✅ |
+| `.md` 文件关联（用户级） | HKCU 写/撤销 + 备份还原，CLI 与脚本双入口 | M4 ✅ |
+| 应用图标 | `tools/make-icon.ps1` → `resources/app.ico`（7 尺寸） | M4 ✅ |
 
 > 自检样例：`MDPreview.exe --diag state <file.md>`、`--diag code <file.cs>`、
 > `--diag export-html <src.md> <out.html>`、`--diag export-pdf <src.md> <out.pdf>`；
@@ -196,7 +199,16 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   改用 xunit v3 自带的 Microsoft.Testing.Platform 运行器（`dotnet run` 或直接跑测试 exe）。
 - 依赖安装与内核构建需要网络/子进程：**完全权限下执行一次并缓存**；受限会话只能
   `dotnet build`（需仓库内 `DOTNET_CLI_HOME`/`NUGET_PACKAGES`）。
-- 分发（M4）：便携 zip 起步，安装包与签名后置；Runtime 缺失时给下载提示。
+- 分发（M4，绿色版）：`dist/MDPreview/` 目录 + `dist/MDPreview-<version>-win-x64-portable.zip`。
+  zip 用系统自带 `tar.exe -a`（bsdtar）打，条目分隔符为 `/`；打包后**自动解压到 `dist/.smoke`
+  跑 `--diag info`**，要求 `kernel=True`、`languages 44`、`portable.flag` 存在，否则构建失败。
+  不做 MSIX/安装器、不做代码签名。
+- 文件关联：用户级 `HKCU\Software\Classes`（不需管理员）。安装前把原默认值备份到
+  `HKCU\Software\MDPreview\AssociationBackup`，卸载还原；`.md/.markdown/.mdown/.mkd/.mdx`。
+  入口两个：`MDPreview.exe --install-association|--uninstall-association|--association-status`
+  与 `tools/associate.ps1 -Install|-Uninstall|-Status`（受限令牌下壳内写注册表会被拒，脚本兜底）。
+- 图标：`tools/make-icon.ps1` 生成 `resources/app.ico`（16/24/32/48/64/128/256，PNG 帧），
+  csproj `ApplicationIcon` 带入 exe；改配色/字形改脚本后重跑即可。
 
 ## 10. 上游同步
 

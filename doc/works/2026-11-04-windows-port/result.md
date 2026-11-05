@@ -141,9 +141,42 @@ image dropped img_001.png      （拖入路径复用同一落盘/插入链路）
 - 导出的 HTML 里图片 `src` 仍是内核当前的资源 URL 形态，跨机器分发前应先保存一次
   （`getSaveMarkdown` 会把图片还原成相对路径）——与上游行为一致，未额外改写。
 
-## 8. 下一步（M4）
+## 8. M4 结果：绿色分发（2026-11-05）
 
-1. 便携 zip：`dist/MDPreview` 打 zip、校验解压即用（绿色语义 + `portable.flag`）；
-2. `HKCU\Software\Classes` 的 `.md` 关联（写入/撤销/管理员不需要）；
-3. 应用图标（ico + 窗口/任务栏/exe 资源）；
-4. Win10 1809 实机验证（WebView2 Runtime 检测与提示）。
+### 8.1 交付
+
+| 区域 | 文件 | 说明 |
+|---|---|---|
+| 便携包 | `build.ps1` | `dist/MDPreview/` + `dist/MDPreview-<ver>-win-x64-portable.zip`（bsdtar 打包，条目 `/` 分隔） |
+| 打包自检 | `build.ps1` | zip 解压到 `dist/.smoke` 跑 `--diag info`，要求 `kernel=True`、`languages 44`、`portable.flag` |
+| 文件关联 | `Io/FileAssociation.cs`、`tools/associate.ps1` | HKCU 写/撤销，安装前备份原默认值、卸载还原；5 个扩展名 |
+| 图标 | `tools/make-icon.ps1`、`resources/app.ico` | 16/24/32/48/64/128/256 七尺寸；csproj `ApplicationIcon` 进 exe |
+
+### 8.2 验收证据
+
+```
+build.ps1 -SkipKernel
+  压缩包：dist\MDPreview-1.0.0-win-x64-portable.zip（57.7 MB）
+  web        dist\.smoke\web (kernel=True)
+  languages  44
+  ==> 完成
+zip entries=318  → portable.flag / web/index.html / resources/languages.json 均为 '  ' 分隔
+exe icon: 32x32（ExtractAssociatedIcon 成功）
+
+tools\associate.ps1 -Install → .md: Markdown -> MDPreview.Markdown（其余 4 个 (无) -> ...）
+                            status: backup=Markdown（.md）
+tools\associate.ps1 -Uninstall → .md -> Markdown，其余恢复「无默认值」，progId 注销
+```
+
+- 关联幂等：重复 `-Install` 不会把自身 ProgId 备份成「原值」（本轮实测踩到并修掉）。
+- 关联还原：撤销后 `.md` 回到原来的 `Markdown` ProgId，其余扩展名默认值删除。
+
+### 8.3 偏差与遗留
+
+- **Win10 1809 实机验证未做**：本机是 Win11 24H2。已做的静态保障：DWM 圆角/标题栏色
+  调用失败即忽略（Win10 保留默认标题栏）；打包用 `tar.exe`（1803+ 自带）；WebView2 Runtime
+  缺失时启动即提示。真机验证需要在 Win10 上解压 zip 跑一遍（步骤见 README）。
+- **沙箱内壳进程写 `HKCU\Software\Classes` 被拒**（`reg.exe` 同样被拒，终端里的 PowerShell
+  可以写）：这是执行环境给的受限令牌，不是代码问题；因此提供 `tools\associate.ps1` 作为
+  等效入口，并在壳内把该异常转成「请改用脚本」的提示。
+- 未做代码签名：SmartScreen 会提示「未知发布者」，绿色版裸 zip 分发的固有限制。

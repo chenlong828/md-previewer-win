@@ -105,6 +105,39 @@ if ($Dev) {
 
     if (-not (Test-Path $exe)) { throw "缺少 $exe" }
     if (-not (Test-Path (Join-Path $dist 'web\index.html'))) { throw '缺少 web/index.html（内核产物未随包）' }
+
+    Step '便携 zip：dist/MDPreview-<version>-win-x64-portable.zip'
+    $version = (Get-Item $exe).VersionInfo.ProductVersion
+    if ([string]::IsNullOrWhiteSpace($version)) { $version = '0.0.0' }
+    $version = ($version -split '\+')[0]
+    $zip = Join-Path $root "dist\MDPreview-$version-win-x64-portable.zip"
+    if (Test-Path $zip) { Remove-Item $zip -Force }
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # 用系统自带 bsdtar 打包：条目分隔符是 '/'，且 Win10 1803+ / Win11 都自带；
+    # .NET Framework 的 ZipFile 会把分隔符写成 '\'，跨平台解压工具会当成文件名的一部分。
+    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if (-not $tar) { throw '找不到 tar.exe（Win10 1803+ 自带；缺失请手动 zip 打包）' }
+    Push-Location $dist
+    try { & $tar.Source -a -c -f $zip * 2>&1 | ForEach-Object { Write-Host "    $_" } }
+    finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { throw "tar 打包失败（$LASTEXITCODE）" }
+    $zipStream.Dispose()
+    $zipSize = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+    Write-Host "  压缩包：$zip（$zipSize MB）"
+
+    # 解压即用自检：把 zip 释放到临时目录，跑 --diag info，确认内核与语言表都在包里
+    $smoke = Join-Path $root 'dist\.smoke'
+    if (Test-Path $smoke) { Remove-Item $smoke -Recurse -Force }
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $smoke)
+    $smokeExe = Join-Path $smoke 'MDPreview.exe'
+    $info = & $smokeExe --diag info 2>&1 | Out-String
+    Write-Host ($info.Trim() -replace '(?m)^', '    ')
+    if ($LASTEXITCODE -ne 0 -or $info -notmatch 'kernel=True' -or $info -notmatch 'languages  44') {
+        throw "便携包自检失败（exit=$LASTEXITCODE）"
+    }
+    if (-not (Test-Path (Join-Path $smoke 'portable.flag'))) { throw '便携包缺少 portable.flag' }
+    Remove-Item $smoke -Recurse -Force
 }
 
 # ---------------------------------------------------------------- 单元测试（xunit v3 / MTP）

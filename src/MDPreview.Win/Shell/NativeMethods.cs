@@ -20,6 +20,9 @@ internal static class NativeMethods
     [DllImport("dwmapi.dll")]
     static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    internal static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+
     public static void ApplyWin11Look(Window window, bool dark)
     {
         var hwnd = new WindowInteropHelper(window).Handle;
