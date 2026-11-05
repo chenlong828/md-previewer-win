@@ -18,6 +18,8 @@ updated: 2026-11-05
 | OQ-W7 | 诊断入口：命令行子命令 vs 设置页 | M3 再定 | 子命令 `selftest` / `screenshot` |
 | OQ-W8 | 上游快照同步节奏 | 未确认 | 每个里程碑收口对照一次，`kernel/SOURCE.md` 记差异 |
 | OQ-W9 | 缩略图默认值 | 跟上游（默认显示） | 默认开，视图菜单可关，偏好跨窗口 |
+| OQ-W10 | Win10 1809 实机验证 | 待用户侧执行 | 本机只到 Win11 24H2；静态保障已做（DWM 调用失败即忽略、tar 打包、Runtime 检测提示），真机解压 zip 跑 `--diag info` + 打开/保存一次即可闭环 |
+| OQ-W11 | 壳内写 `HKCU\Software\Classes` 被拒 | 受限令牌所致，非代码问题 | 提供 `tools/associate.ps1` 等效入口，壳内异常转提示；普通用户会话下 `--install-association` 应正常 |
 
 ## 已收敛（留档）
 
