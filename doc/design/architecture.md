@@ -79,7 +79,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | `CMP-app-shell` | 窗口、菜单、最近文件、单实例、主题/缩放、缩略图偏好 |
 | `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、同源资源前缀、CSP、上下文菜单 |
 | `CMP-document-io` | 读写、编码检测、原子写、尾换行、外部修改监听 |
-| `CMP-drawer` | 目录树抽屉：根=文档目录、懒加载、上级/用户目录切换、宽度拖拽、双击开新窗口 |
+| `CMP-drawer` | 目录树抽屉：根=文档目录、懒加载、上级/用户目录切换、宽度拖拽、双击开新窗口；**默认打开**，三个入口（状态栏「☰ 文件」按钮、视图菜单、Ctrl+\），宽度与开关持久化 |
 | `CMP-image-store` | 图片落盘：`resource/<文档名>/`、`img_NNN` 序号命名、原名冲突加序号、关闭时 GC |
 | `CMP-code-view` | 代码只读视图：`resources/languages.json` 扩展名 → 语言 id、行号、>2 MB 降级纯文本、不写盘 |
 | `CMP-export` | 导出 PDF（`PrintToPdfAsync`，背景/页边距）与单文件 HTML（内核 `exportStandaloneHTML`） |
@@ -209,6 +209,9 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   与 `tools/associate.ps1 -Install|-Uninstall|-Status`（受限令牌下壳内写注册表会被拒，脚本兜底）。
 - 图标：`tools/make-icon.ps1` 生成 `resources/app.ico`（16/24/32/48/64/128/256，PNG 帧），
   csproj `ApplicationIcon` 带入 exe；改配色/字形改脚本后重跑即可。
+- **重建不吞用户数据**：绿色版的 `dist/MDPreview/data`（settings/日志/WebView2 配置）在
+  `dotnet publish` 前暂存到 `dist/.data-stash`，发布后还原；打包时 `--exclude data` 排除，
+  zip 里只有程序本体（实测 318 条目、57.7 MB，无 data/ 条目）。
 
 ## 10. 上游同步
 

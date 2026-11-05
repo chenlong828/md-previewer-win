@@ -25,6 +25,28 @@
             <Setter Property="Foreground" Value="{DynamicResource ChromeFg}" />
             <Setter Property="BorderBrush" Value="{DynamicResource ChromeBorder}" />
         </Style>
+        <Style x:Key="StatusButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource ChromeFg}" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ChromeBorder}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
@@ -35,6 +57,10 @@
                     <DockPanel />
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
+            <StatusBarItem DockPanel.Dock="Left">
+                <Button x:Name="DrawerToggleButton" Style="{StaticResource StatusButton}" Content="☰ 文件"
+                        ToolTip="显示/隐藏文件抽屉（Ctrl+\）" Click="OnDrawerToggleClick" />
+            </StatusBarItem>
             <StatusBarItem>
                 <TextBlock x:Name="StatsText" Foreground="{DynamicResource MutedFg}" FontSize="12" />
             </StatusBarItem>

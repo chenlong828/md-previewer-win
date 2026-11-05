@@ -92,10 +92,22 @@ if ($Dev) {
     if ($LASTEXITCODE -ne 0) { throw 'dotnet build 失败' }
 } else {
     Step "壳：dotnet publish self-contained ($configuration, win-x64)"
+    # 绿色版把用户数据写在 dist/MDPreview/data 里，重新构建不能连数据一起删掉
+    $stash = Join-Path $root 'dist\.data-stash'
+    if (Test-Path $stash) { Remove-Item $stash -Recurse -Force }
+    if (Test-Path (Join-Path $dist 'data')) {
+        New-Item -ItemType Directory -Force (Split-Path -Parent $stash) | Out-Null
+        Move-Item (Join-Path $dist 'data') $stash -Force
+        Write-Host '  已暂存 dist/MDPreview/data（构建后还原）'
+    }
     if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
     dotnet publish 'src\MDPreview.Win\MDPreview.Win.csproj' -c $configuration -r win-x64 --self-contained true `
         -p:PublishReadyToRun=false -o $dist --nologo
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish 失败' }
+    if (Test-Path $stash) {
+        Move-Item $stash (Join-Path $dist 'data') -Force
+        Write-Host '  已还原 dist/MDPreview/data'
+    }
 
     Step '组装绿色目录：portable.flag + 版本说明'
     New-Item -ItemType File -Path (Join-Path $dist 'portable.flag') -Force | Out-Null
@@ -119,10 +131,10 @@ if ($Dev) {
     $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
     if (-not $tar) { throw '找不到 tar.exe（Win10 1803+ 自带；缺失请手动 zip 打包）' }
     Push-Location $dist
-    try { & $tar.Source -a -c -f $zip * 2>&1 | ForEach-Object { Write-Host "    $_" } }
+    # 用户数据目录（settings/日志/WebView2 缓存）不进包
+    try { & $tar.Source -a -c -f $zip --exclude 'data' --exclude 'data/*' * 2>&1 | ForEach-Object { Write-Host "    $_" } }
     finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "tar 打包失败（$LASTEXITCODE）" }
-    $zipStream.Dispose()
     $zipSize = [math]::Round((Get-Item $zip).Length / 1MB, 1)
     Write-Host "  压缩包：$zip（$zipSize MB）"
 

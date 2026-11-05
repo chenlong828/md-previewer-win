@@ -566,6 +566,8 @@ public partial class DocumentWindow : Window
 
     // ---------------------------------------------------------------- 文件抽屉
 
+    void OnDrawerToggleClick(object sender, RoutedEventArgs e) => ToggleDrawer();
+
     void ToggleDrawer()
     {
         _settings.DrawerVisible = !_settings.DrawerVisible;
@@ -578,6 +580,10 @@ public partial class DocumentWindow : Window
     {
         var visible = _settings.DrawerVisible;
         _drawerMenu.IsChecked = visible;
+        DrawerToggleButton.ToolTip = visible ? "隐藏文件抽屉（Ctrl+\\）" : "显示文件抽屉（Ctrl+\\）";
+        DrawerToggleButton.Background = visible
+            ? (Brush)FindResource("ChromeBorder")
+            : Brushes.Transparent;
         DrawerPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         DrawerSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         DrawerColumn.Width = visible ? new GridLength(Math.Clamp(_settings.DrawerWidth, 180, 520)) : new GridLength(0);

@@ -10,7 +10,7 @@ public sealed class AppSettings
     public double Zoom { get; set; } = 1.0;
     public bool MinimapVisible { get; set; } = true;
     public bool CodeLineNumbers { get; set; } = true;
-    public bool DrawerVisible { get; set; }
+    public bool DrawerVisible { get; set; } = true;
     public double DrawerWidth { get; set; } = 260;
     public List<string> Recent { get; set; } = [];
     public string? LastFolder { get; set; }

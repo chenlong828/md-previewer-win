@@ -172,7 +172,6 @@ tools\associate.ps1 -Uninstall → .md -> Markdown，其余恢复「无默认值
 - 关联还原：撤销后 `.md` 回到原来的 `Markdown` ProgId，其余扩展名默认值删除。
 
 ### 8.3 偏差与遗留
-
 - **Win10 1809 实机验证未做**：本机是 Win11 24H2。已做的静态保障：DWM 圆角/标题栏色
   调用失败即忽略（Win10 保留默认标题栏）；打包用 `tar.exe`（1803+ 自带）；WebView2 Runtime
   缺失时启动即提示。真机验证需要在 Win10 上解压 zip 跑一遍（步骤见 README）。
@@ -180,3 +179,17 @@ tools\associate.ps1 -Uninstall → .md -> Markdown，其余恢复「无默认值
   可以写）：这是执行环境给的受限令牌，不是代码问题；因此提供 `tools\associate.ps1` 作为
   等效入口，并在壳内把该异常转成「请改用脚本」的提示。
 - 未做代码签名：SmartScreen 会提示「未知发布者」，绿色版裸 zip 分发的固有限制。
+
+### 8.4 试用反馈修复（2026-11-05，用户实机）
+
+- **反馈**：「使用正常，没有左侧可以拉出来的抽屉」——抽屉默认 `false` 且只有「视图 → 文件抽屉」
+  一个入口，等于藏起来了。
+- **修复**：默认改为打开（`AppSettings.DrawerVisible = true`），并在状态栏左下加常驻
+  「☰ 文件」按钮（打开时给浅底、悬停高亮，tooltip 随状态变），与视图菜单、Ctrl+\ 三处同源；
+  单元测试覆盖默认值。实机截图确认 drawer 与按钮都在（`artifacts/shot-dist-drawer.png`）。
+- **顺带修掉 1 个会咬人的问题**：`build.ps1` 原来 `Remove-Item dist/MDPreview` 会把绿色版
+  `data/`（设置、最近文件、WebView2 配置）一起删掉。现在发布前暂存 `dist/.data-stash`、
+  发布后还原，打包时 `--exclude data`，重建不再吞用户数据（用 `data/sentinel.txt` 实测保留）。
+- **遗留**：窗口较窄（默认 1080）且文档含宽表格时，markdown 区会出现横向滚动条
+  （缩略图预留 146px 后可用宽度不够）。不影响编辑，暂不改布局；需要的话可以把默认窗口
+  调宽或给表格加可换行样式。

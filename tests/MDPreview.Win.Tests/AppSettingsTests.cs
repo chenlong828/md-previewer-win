@@ -38,6 +38,15 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
+    public void Defaults_show_the_file_drawer()
+    {
+        // 抽屉默认打开：新人第一次启动就能看到左侧目录树，而不是只有一个隐藏快捷键
+        var settings = new AppSettings();
+        Assert.True(settings.DrawerVisible);
+        Assert.Equal(260, settings.DrawerWidth);
+    }
+
+    [Fact]
     public void Save_then_load_roundtrips_preferences()
     {
         var settings = new AppSettings
