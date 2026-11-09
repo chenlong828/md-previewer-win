@@ -1,11 +1,11 @@
 ---
-layer: works
+layer: history
 module: global
-status: active
-updated: 2026-11-05
+status: frozen
+updated: 2026-11-09
 ---
 
-# 工序 brief：MDPreview Windows 移植（M1 垂直切片）
+# 工序 brief：MDPreview Windows 移植（M1 垂直切片 → M4 分发）
 
 ## 1. 需求
 
@@ -25,9 +25,9 @@ updated: 2026-11-05
 | 决策 | 状态 |
 |---|---|
 | 首版范围：M1 垂直切片 | ✅ 用户已确认（2026-11-04） |
-| 内核路线：v2（现落地为「快照 vendor + 最小补丁」） | ✅ 方向确认；补丁方式待确认（Q2） |
-| 壳技术栈：WPF / WPF+Win11 外观 / WinUI 3 | ⏳ 待确认（Q1） |
-| 单实例 + 命名管道、HKCU 文件关联 | 默认，不阻塞 |
+| 内核路线：v2（现落地为「快照 vendor + 最小补丁」） | ✅ 方向确认；补丁方式已确认就地补丁（2026-11-05，P-1） |
+| 壳技术栈：WPF + WebView2 + Win11 外观 | ✅ 已确认（2026-11-05） |
+| 单实例 + 命名管道、HKCU 文件关联 | ✅ 默认执行（M1/M4 交付） |
 
 ## 4. 范围（M1）
 
@@ -61,15 +61,15 @@ updated: 2026-11-05
 
 | ID | 任务 | 组件 | 依赖 | 状态 |
 |---|---|---|---|---|
-| T-01 | vendor 内核 `web/`→`kernel/`，记 `SOURCE.md`，跑通 Node 门 | CMP-kernel-* | 无 | 待做 |
-| T-02 | 内核补丁：`PathPolicy`（scheme/style）参数化 + 单测 | CMP-kernel-semantics | T-01 | 待确认（Q2） |
-| T-03 | C# `KernelClient` v2 + 单测（帧/超时/错误码） | CMP-shell-bridge | 无 | 待做 |
-| T-04 | WebView2 宿主：虚拟主机、`mdres`、CSP、菜单/拖放/快捷键 | CMP-shell-bridge | T-03 | 待做 |
-| T-05 | 文档 IO：编码、原子写、外部修改 | CMP-document-io | 无 | 待做 |
-| T-06 | 壳骨架：窗口/菜单/最近/单实例/主题缩放/缩略图偏好 | CMP-app-shell | T-04,T-05 | 待做 |
-| T-07 | `build.ps1`：内核门 → `dotnet publish` → 组装 | — | T-01,T-06 | 待做 |
-| T-08 | 端到端冒烟：打开→编辑→保存→图片→缩略图 | — | T-06 | 待做 |
-| T-09 | 文档收口：决策归档、architecture 转 current | — | T-08 | 待做 |
+| T-01 | vendor 内核 `web/`→`kernel/`，记 `SOURCE.md`，跑通 Node 门 | CMP-kernel-* | 无 | ✅ M1 |
+| T-02 | 内核补丁：`PathPolicy`（scheme/style）参数化 + 单测 | CMP-kernel-semantics | T-01 | ✅ M1（P-1） |
+| T-03 | C# `KernelClient` v2 + 单测（帧/超时/错误码） | CMP-shell-bridge | 无 | ✅ M1 |
+| T-04 | WebView2 宿主：虚拟主机、`mdres`、CSP、菜单/拖放/快捷键 | CMP-shell-bridge | T-03 | ✅ M1（同源前缀替代 `mdres`） |
+| T-05 | 文档 IO：编码、原子写、外部修改 | CMP-document-io | 无 | ✅ M1 |
+| T-06 | 壳骨架：窗口/菜单/最近/单实例/主题缩放/缩略图偏好 | CMP-app-shell | T-04,T-05 | ✅ M1 |
+| T-07 | `build.ps1`：内核门 → `dotnet publish` → 组装 | — | T-01,T-06 | ✅ M1 |
+| T-08 | 端到端冒烟：打开→编辑→保存→图片→缩略图 | — | T-06 | ✅ M1–M4（`--diag` + 实机） |
+| T-09 | 文档收口：决策归档、architecture 转 current | — | T-08 | ✅ 2026-11-09 |
 
 ## 8. 装载清单
 
@@ -83,4 +83,16 @@ updated: 2026-11-05
 
 - 打印与「另存为后 baseDir」时序沿用上游人工点验清单，M3 再自动化；
 - 上游快照与主本漂移：M1 收口时对照一次，写入 `kernel/SOURCE.md`；
-- Win10（1809）实机未验，M4 前补一次。
+- Win10（1809）实机未验；已登记 OQ-W10，待用户侧在 Win10 解压便携包补测。
+
+## 10. 收口（2026-11-09）
+
+M1–M4 全部交付；本工序运行态复核后关闭并归档：
+
+- 内核门：`check-kernel` 43 文件 OK；5 套件 95 项全绿；语言表 44 门 / 78 扩展名 OK。
+- 壳：`dotnet build -c Debug` 0 error；单测 44 项全绿。
+- 分发：`dist/MDPreview/MDPreview.exe --diag info` 退出 0（protocol 2 / kernel=True / languages 44）。
+- 文档：`architecture.md` 转 `current`；OQ-W1/W2/W6/W7/W9 标已确认；工序目录移入
+  `doc/history/works/2026-11-04-windows-port/`（frontmatter `frozen`）。
+- 遗留仍只在 `plan/open-questions.md`（OQ-W10 Win10 实机、OQ-W11 受限令牌关联）与
+  `result.md` §8.4 / §5 的体验债，不阻塞本工序关闭。

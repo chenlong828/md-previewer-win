@@ -1,14 +1,15 @@
 ---
 layer: design
 module: global
-status: draft
-updated: 2026-11-05
+status: current
+updated: 2026-11-09
 ---
 
 # Windows 版系统架构与取舍
 
 > 上游基线：`md-previewer@64ba91b`（内核 v2 + 组件拆分 + 文档缩略图已交付）。
-> 本文是 Windows 侧的现行技术真相；壳选型确认后转 `status: current`。
+> 本文是 Windows 侧的现行技术真相；壳选型已于 2026-11-05 确认为 WPF + WebView2，
+> M1–M4 已交付（工序记录见 `../history/works/2026-11-04-windows-port/`）。
 
 ## 1. 移植策略
 
@@ -54,7 +55,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 项 | 选择 | 说明 |
 |---|---|---|
 | 运行时 | .NET 9（`net9.0-windows`） | 本机 SDK 9.0.320 已装 |
-| 壳 UI | WPF + `Microsoft.Web.WebView2` | 待 Q1 确认；WinUI 3 为备选 |
+| 壳 UI | WPF + `Microsoft.Web.WebView2` | 已确认（2026-11-05）；WinUI 3 为备选 |
 | WebView2 | Runtime 156.0.4314.58（已装） | 缺 Runtime 时启动提示 |
 | 内核 | 上游 v2（Milkdown 7.7 / ProseMirror） | vendor；esbuild 产物沿用上游 target |
 | 编码 | UTF-8 / GB18030（`CodePagesEncodingProvider`） | 上游 FileSupport 同等口径 |
@@ -163,7 +164,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   读字节后发宿主消息（`__host:'dropImage'`），仍由壳写盘。
 - 路径：`\\?\` 长路径、UNC、大小写不敏感比较；比较一律 `OrdinalIgnoreCase`。
 - 外部修改：`FileSystemWatcher` + 窗口激活时二次校验（mtime/size），不静默覆盖。
-- 关联：`HKCU\Software\Classes\.md`（M4 随安装包）。
+- 关联：`HKCU\Software\Classes\.md`（M4 已交付，用户级）；备份与还原见 §9。
 - 语言表：`resources/languages.json` 单一来源，C# 侧只做「扩展名 → 语言 id」映射。
 
 ## 8. 功能对齐
@@ -229,4 +230,4 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   打印/查找，需改回开关并重新安排快捷键，避免双份行为。
 - **`--allow-file-access-from-files`**：本方案不使用；若将来为兼容回退到 `file://` 页面，
   需重新评估该开关的暴露面。
-- **Win10 1809**：WebView2 支持但未实机验证；M4 前补测。
+- **Win10 1809**：WebView2 支持但未实机验证；已登记 OQ-W10，待 Win10 实机跑一遍便携包。

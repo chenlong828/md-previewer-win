@@ -71,8 +71,9 @@ dist/MDPreview/MDPreview.exe --diag export-pdf samples/功能演示.md out.pdf
 - **里程碑与风险** → [doc/plan/roadmap.md](doc/plan/roadmap.md) ·
   [risks.md](doc/plan/risks.md) · [open-questions.md](doc/plan/open-questions.md)
 - **需求** → [doc/requirements/](doc/requirements/)（11 张，同步自上游）
-- **当前工序** → [doc/works/2026-11-04-windows-port/brief.md](doc/works/2026-11-04-windows-port/brief.md)
-- **选型提案** → [decision-proposal.md](doc/works/2026-11-04-windows-port/decision-proposal.md)
+- **当前工序** → `doc/works/`（M1–M4 已收口，记录归档在
+  [history/works/2026-11-04-windows-port/](doc/history/works/2026-11-04-windows-port/)）
+- **选型提案** → [decision-proposal.md](doc/history/works/2026-11-04-windows-port/decision-proposal.md)
 - **导航与开发规范** → [doc/README.md](doc/README.md) · [AGENTS.md](AGENTS.md) ·
   [.agents/skills/](.agents/skills/)
 

@@ -1,8 +1,8 @@
 ---
-layer: works
+layer: history
 module: global
-status: done
-updated: 2026-11-05
+status: frozen
+updated: 2026-11-09
 ---
 
 # 工序结果：M1 垂直切片 → M2 抽屉与图片（Windows 壳跑通「打开 → 编辑 → 保存 → 插图 → 打包」）
@@ -193,3 +193,24 @@ tools\associate.ps1 -Uninstall → .md -> Markdown，其余恢复「无默认值
 - **遗留**：窗口较窄（默认 1080）且文档含宽表格时，markdown 区会出现横向滚动条
   （缩略图预留 146px 后可用宽度不够）。不影响编辑，暂不改布局；需要的话可以把默认窗口
   调宽或给表格加可换行样式。
+
+## 9. 收口复核（2026-11-09）
+
+关工序前重跑一遍门禁，确认交付物与文档状态一致：
+
+```
+node kernel/check-kernel.mjs     → OK（43 个内核文件）
+5 套件（contract/core/minimap/paths-win32/semantics） → 95 pass, 0 fail
+tools/check-languages.mjs        → OK（44 门语言，78 个扩展名）
+dotnet build src/MDPreview.Win -c Debug → 0 error（2 个 NU1900 离线警告）
+单测（xunit v3 / MTP）           → 44 passed, 0 failed
+dist/MDPreview/MDPreview.exe --diag info → exit 0，protocol 2 / kernel=True / languages 44
+```
+
+- 单测从 §7 记录的 43 项增至 44 项（M4 反馈修复新增默认值断言），本文早前数字保留为
+  当时的验收快照。
+- 文档收口：`design/architecture.md` 转 `current`；`plan/open-questions.md` 的
+  OQ-W1/W2/W6/W7/W9 标已确认；本工序目录归档到 `doc/history/works/2026-11-04-windows-port/`。
+- 未闭环项全部在 `plan/open-questions.md`：OQ-W10（Win10 1809 实机）、OQ-W11（受限令牌
+  下壳内写关联）；其余为 §5/§8.4 已记录的体验债（外部修改提示人工验收、首启偏慢、
+  宽表格横向滚动、抽屉不自动 rescan、拖入 `.md` 不开窗、无打印菜单、无 CI/签名）。

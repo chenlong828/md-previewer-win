@@ -15,7 +15,8 @@ md-previewer（macOS，Swift/AppKit + WKWebView）的 Windows 移植版。目标
 
 1. `doc/design/architecture.md`：现行技术真相（栈、桥、资源加载、文件 IO、补丁、安全取舍）。
 2. `doc/plan/roadmap.md`：里程碑；`doc/plan/open-questions.md`：待决项。
-3. `doc/works/2026-11-04-windows-port/brief.md`：当前工序任务表。
+3. `doc/works/`：当前工序任务表（暂无在办工序；M1–M4 已归档至
+   `doc/history/works/2026-11-04-windows-port/`）。
 4. `.agents/skills/`：五个开发 skill（req-scenario-spec / design-before-coding / arch-design-spec / doc-layout-spec / dev-execution-spec）。
 
 ## 硬约束

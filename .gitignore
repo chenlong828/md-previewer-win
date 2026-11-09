@@ -4,6 +4,7 @@ obj/
 dist/
 kernel/dist/
 .kernel-cache/
+.bundle-cache/
 
 # ä¾èµ–ç¼“å­˜ï¼ˆä»“åº“å†…ï¼Œä¾›ç¦»çº¿æ„å»ºï¼‰
 .nuget/
@@ -27,10 +28,10 @@ Thumbs.db
 artifacts/
 coverage/
 *.trx
-# ÔËĞĞÆÚ±¾µØÊı¾İ£¨±¾»úµ÷ÊÔÓÃ£©
+# è¿è¡ŒæœŸæœ¬åœ°æ•°æ®ï¼ˆæœ¬æœºè°ƒè¯•ç”¨ï¼‰
 .appdata/
 *.out.log
 
-# ±¾»úÑéÊÕÓÃµÄÁÙÊ±ÓÃ»§Êı¾İÄ¿Â¼£¨WebView2 profile »á´øÒ»¶Ñ»º´æ£©
+# æœ¬æœºéªŒæ”¶ç”¨çš„ä¸´æ—¶ç”¨æˆ·æ•°æ®ç›®å½•ï¼ˆWebView2 profile ä¼šå¸¦ä¸€å †ç¼“å­˜ï¼‰
 .appdata-fresh/
 .appdata*/

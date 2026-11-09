@@ -2,7 +2,7 @@
 layer: plan
 module: global
 status: current
-updated: 2026-11-05
+updated: 2026-11-09
 ---
 
 # 里程碑路线图（Windows 移植）
@@ -13,10 +13,13 @@ updated: 2026-11-05
 | 里程碑 | 内容 | 依赖 | 状态 |
 |---|---|---|---|
 | **M0 方向确认** | 壳选型、内核接入方式、首版范围（决策提案 + 架构文档） | 无 | ✅ 2026-11-05（WPF 壳；内核快照 + P-1） |
-| **M1 垂直切片** | vendor 内核 + PathPolicy 补丁 + C# 桥 + WebView2 宿主 + 文档 IO + 壳骨架 + `build.ps1` + 冒烟 | M0 | ✅ 2026-11-05（见 `works/2026-11-04-windows-port/result.md`） |
+| **M1 垂直切片** | vendor 内核 + PathPolicy 补丁 + C# 桥 + WebView2 宿主 + 文档 IO + 壳骨架 + `build.ps1` + 冒烟 | M0 | ✅ 2026-11-05（见 [result.md](../history/works/2026-11-04-windows-port/result.md)） |
 | **M2 浏览与媒体** | 文件抽屉（懒加载目录树）、图片粘贴/拖放导入、最近文件完善 | M1 | ✅ 2026-11-05（见 result.md「M2」） |
 | **M3 阅读与输出** | 代码只读视图（44 语言/行号/缩略图）、PDF/HTML/打印、查找栏与源码模式验收、诊断子命令 | M2 | ✅ 2026-11-05（见 result.md「M3」） |
-| **M4 分发** | 便携 zip、文件关联、图标、Win10 实机验证 | M3 | ✅ 2026-11-05（Win10 实机待用户侧验证，见 result.md「M4」） |
+| **M4 分发** | 便携 zip、文件关联、图标、Win10 实机验证 | M3 | ✅ 2026-11-05（Win10 实机待用户侧验证，见 [result.md](../history/works/2026-11-04-windows-port/result.md)「M4」与 OQ-W10） |
+
+> M1–M4 工序已于 2026-11-09 收口并归档：`doc/history/works/2026-11-04-windows-port/`。
+> 新工序在 `doc/works/` 立项。
 
 ## 与上游的关系
 
