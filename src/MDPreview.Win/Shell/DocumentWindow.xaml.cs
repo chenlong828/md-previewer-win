@@ -46,6 +46,8 @@ public partial class DocumentWindow : Window
 
     static readonly object DrawerPlaceholder = new();
     string? _drawerRoot;
+    string? _directoryRoot;
+    DateTime _lastDrawerRefresh;
 
     /// <summary>超过该字节数的代码文件不启用语法高亮（纯文本渲染，避免卡顿）。</summary>
     const long CodeHighlightByteLimit = 2_000_000;
@@ -57,6 +59,9 @@ public partial class DocumentWindow : Window
 
     /// <summary>代码文件 = 非 Markdown 的可开文件；只读视图，不写盘。</summary>
     bool IsCodeDocument => _path is not null && !MarkdownExtensions.Contains(Path.GetExtension(_path));
+
+    /// <summary>目录模式：没有文档，只有抽屉导航（CLI 目录参数 / 打开文件夹）。</summary>
+    bool IsDirectoryMode => _directoryRoot is not null;
     bool _codeHighlightAllowed = true;
     bool _codeLoaded;
 
@@ -71,7 +76,11 @@ public partial class DocumentWindow : Window
         Loaded += async (_, _) => await InitializeAsync();
         SourceInitialized += (_, _) => ApplyChrome(IsDark);
         Closing += OnClosing;
-        Activated += (_, _) => UpdateRecentMenu();
+        Activated += (_, _) =>
+        {
+            UpdateRecentMenu();
+            RefreshDrawerOnActivate();
+        };
         ApplyDrawerState();
     }
 
@@ -103,7 +112,8 @@ public partial class DocumentWindow : Window
             InitializeContextMenu(_host.Core);
 
             var pending = _initialPath ?? _deferredPath;
-            if (pending is not null && File.Exists(pending)) await OpenInitialAsync(pending);
+            if (pending is not null && Directory.Exists(pending)) await OpenDirectoryInitialAsync(pending);
+            else if (pending is not null && File.Exists(pending)) await OpenInitialAsync(pending);
             else await SendInitAsync("", null);
         }
         catch (Exception ex)
@@ -127,6 +137,30 @@ public partial class DocumentWindow : Window
         UpdateRecentMenu();
         StartWatcher(path);
         Log.Info("opened " + path);
+    }
+
+    /// <summary>目录模式：空编辑器 + 抽屉导航（CLI 目录参数 / 打开文件夹）。</summary>
+    async Task OpenDirectoryInitialAsync(string directory)
+    {
+        _directoryRoot = directory;
+        _doc = null;
+        _dirty = false;
+        await SendInitAsync("", null);
+        _settings.DrawerVisible = true;
+        _settings.Save();
+        ApplyDrawerState();
+        UpdateTitle();
+        LoadDrawerRoot();
+        Log.Info("opened folder " + directory);
+    }
+
+    /// <summary>「打开文件夹」：新窗口进入目录模式（不覆盖当前文档）。</summary>
+    async Task OpenFolderViaDialogAsync()
+    {
+        var dialog = new OpenFolderDialog { Title = "打开文件夹", Multiselect = false };
+        if (dialog.ShowDialog(this) != true) return;
+        App.Current.OpenDocument(dialog.FolderName);
+        await Task.CompletedTask;
     }
 
     async Task SendInitAsync(string markdown, string? path)
@@ -527,6 +561,7 @@ public partial class DocumentWindow : Window
         {
             "new" => NewDocumentAsync(),
             "open" => OpenViaDialogAsync(),
+            "openFolder" => OpenFolderViaDialogAsync(),
             "save" => SaveAsync(false),
             "saveAs" => SaveAsync(true),
             "close" => CloseWindowAsync(),
@@ -606,12 +641,41 @@ public partial class DocumentWindow : Window
 
     void LoadDrawerRoot()
     {
-        _drawerRoot = FileTree.RootFor(_path);
-        DrawerRootText.Text = Path.GetFileName(_drawerRoot) is { Length: > 0 } name ? name : _drawerRoot;
+        SetDrawerRoot(_directoryRoot ?? FileTree.RootFor(_path));
+    }
+
+    /// <summary>切锚点/刷新树：抽屉根目录的唯一写入口。</summary>
+    void SetDrawerRoot(string directory)
+    {
+        if (!Directory.Exists(directory)) return;
+        _drawerRoot = directory;
+        UpdateDrawerRootLabel();
+        ReloadDrawerTree();
+    }
+
+    void UpdateDrawerRootLabel()
+    {
+        if (_drawerRoot is null) return;
+        DrawerRootText.Text = DrawerAnchor.DisplayName(_drawerRoot);
         DrawerRootText.ToolTip = _drawerRoot;
+    }
+
+    void ReloadDrawerTree()
+    {
+        if (_drawerRoot is null) return;
         DrawerTree.Items.Clear();
         foreach (var entry in FileTree.Enumerate(_drawerRoot)) DrawerTree.Items.Add(BuildDrawerNode(entry));
         SelectCurrentDocumentInDrawer();
+    }
+
+    /// <summary>窗口重新激活时刷新根层（节流 2 s，避免菜单/弹窗引起的抖动）。</summary>
+    void RefreshDrawerOnActivate()
+    {
+        if (_drawerRoot is null || !_settings.DrawerVisible) return;
+        var now = DateTime.UtcNow;
+        if ((now - _lastDrawerRefresh).TotalSeconds < 2) return;
+        _lastDrawerRefresh = now;
+        ReloadDrawerTree();
     }
 
     TreeViewItem BuildDrawerNode(FileEntry entry)
@@ -678,22 +742,35 @@ public partial class DocumentWindow : Window
 
     void OnDrawerUpClick(object sender, RoutedEventArgs e)
     {
-        var parent = Path.GetDirectoryName(_drawerRoot ?? "");
-        if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) return;
-        _drawerRoot = parent;
-        DrawerRootText.Text = Path.GetFileName(parent) is { Length: > 0 } name ? name : parent;
-        DrawerRootText.ToolTip = parent;
-        DrawerTree.Items.Clear();
-        foreach (var entry in FileTree.Enumerate(parent)) DrawerTree.Items.Add(BuildDrawerNode(entry));
+        if (_drawerRoot is null) return;
+        var parent = Path.GetDirectoryName(_drawerRoot);
+        if (string.IsNullOrEmpty(parent)) return;
+        SetDrawerRoot(parent);
     }
 
     void OnDrawerHomeClick(object sender, RoutedEventArgs e)
     {
-        _drawerRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        DrawerRootText.Text = "用户目录";
-        DrawerRootText.ToolTip = _drawerRoot;
-        DrawerTree.Items.Clear();
-        foreach (var entry in FileTree.Enumerate(_drawerRoot)) DrawerTree.Items.Add(BuildDrawerNode(entry));
+        SetDrawerRoot(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    }
+
+    /// <summary>锚点菜单：盘符根 → 当前目录的祖先链，选中即重锚抽屉。</summary>
+    void OnDrawerAnchorClick(object sender, RoutedEventArgs e)
+    {
+        if (_drawerRoot is null) return;
+        var menu = new ContextMenu { PlacementTarget = DrawerAnchorButton };
+        foreach (var directory in DrawerAnchor.Chain(_drawerRoot))
+        {
+            var item = new MenuItem
+            {
+                Header = DrawerAnchor.DisplayName(directory),
+                IsCheckable = true,
+                IsChecked = string.Equals(directory, _drawerRoot, StringComparison.OrdinalIgnoreCase),
+                ToolTip = directory,
+            };
+            item.Click += (_, _) => SetDrawerRoot(directory);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
     }
 
     void OnDrawerSplitterDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
@@ -1072,6 +1149,13 @@ public partial class DocumentWindow : Window
 
     void UpdateTitle()
     {
+        if (IsDirectoryMode)
+        {
+            Title = $"{DrawerAnchor.DisplayName(_directoryRoot!)} — {Product}";
+            UpdateDocumentMenuState();
+            UpdateState();
+            return;
+        }
         var name = _path is null ? "未命名" : Path.GetFileName(_path);
         Title = $"{name}{(_dirty ? " *" : "")} — {Product}";
         UpdateDocumentMenuState();
@@ -1080,6 +1164,11 @@ public partial class DocumentWindow : Window
 
     void UpdateState()
     {
+        if (IsDirectoryMode)
+        {
+            StateText.Text = "目录 · " + DrawerAnchor.DisplayName(_directoryRoot!);
+            return;
+        }
         if (IsCodeDocument && _ready)
         {
             StateText.Text = _path is null ? "只读" : "只读 · " + Path.GetFileName(_path);
@@ -1122,6 +1211,7 @@ public partial class DocumentWindow : Window
         var file = new MenuItem { Header = "文件(_F)" };
         file.Items.Add(Item("新建", (_, _) => _ = NewDocumentAsync(), "Ctrl+N"));
         file.Items.Add(Item("打开…", (_, _) => _ = OpenViaDialogAsync(), "Ctrl+O"));
+        file.Items.Add(Item("打开文件夹…", (_, _) => _ = OpenFolderViaDialogAsync(), "Ctrl+Shift+O"));
         file.Items.Add(_recentMenu);
         file.Items.Add(new Separator());
         file.Items.Add(Item("保存", (_, _) => _ = SaveAsync(false), "Ctrl+S"));

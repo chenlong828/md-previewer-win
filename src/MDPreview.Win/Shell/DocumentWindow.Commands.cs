@@ -128,6 +128,14 @@ public partial class DocumentWindow
         return Task.CompletedTask;
     }
 
+    /// <summary>诊断：目录模式状态（根目录、抽屉条目数、标题）。</summary>
+    internal Task<string> DiagDirectoryAsync()
+    {
+        var root = _directoryRoot ?? "";
+        return Task.FromResult(
+            $"directory={root} title={Title} entries={DrawerTree.Items.Count} drawer={_settings.DrawerVisible} root={_drawerRoot}");
+    }
+
     /// <summary>诊断：输出当前菜单树的条目、勾选与可用态（无界面验收菜单结构）。</summary>
     internal Task<string> DiagMenuAsync()
     {

@@ -115,7 +115,7 @@ public partial class App : Application
 
         var source = args.ElementAtOrDefault(1);
         var target = args.ElementAtOrDefault(2);
-        if (source is null || !File.Exists(source))
+        if (source is null || (!File.Exists(source) && !Directory.Exists(source)))
         {
             Console.WriteLine($"missing source file: {source}");
             Shutdown(1);
@@ -146,6 +146,10 @@ public partial class App : Application
                     break;
                 case "menu":
                     Console.WriteLine(await window.DiagMenuAsync());
+                    exitCode = 0;
+                    break;
+                case "dir":
+                    Console.WriteLine(await window.DiagDirectoryAsync());
                     exitCode = 0;
                     break;
                 case "export-html" when target is not null:

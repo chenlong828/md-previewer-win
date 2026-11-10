@@ -56,7 +56,7 @@
     // 壳级快捷键：WebView 是原生子窗口，WPF 的 InputBinding 拿不到按键，这里统一转成宿主消息。
     // 只拦壳有语义的组合，编辑键（撤销/复制/粘贴/查找输入）保持浏览器原生行为。
     var shellShortcuts = {
-        's': 'save', 'S': 'saveAs', 'o': 'open', 'n': 'new', 'w': 'close',
+        's': 'save', 'S': 'saveAs', 'o': 'open', 'O': 'openFolder', 'n': 'new', 'w': 'close',
         'f': 'find', 'g': 'findNext', 'G': 'findPrev', 'p': 'print',
         '/': 'toggleSource', '\\': 'toggleDrawer',
         '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '0': 'zoomReset'
