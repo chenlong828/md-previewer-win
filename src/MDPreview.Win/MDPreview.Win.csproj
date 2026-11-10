@@ -28,4 +28,8 @@
           Link="resources\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="MDPreview.Win.Tests" />
+  </ItemGroup>
+
 </Project>

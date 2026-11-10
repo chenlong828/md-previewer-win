@@ -68,6 +68,11 @@
         event.stopPropagation();
         window.chrome.webview.postMessage(JSON.stringify({ __host: 'shortcut', key: name }));
     }, true);
+    // 右键点：WebView2 的 ContextMenuRequested 只给 WebView 坐标；页面先按 CSS 像素记录
+    // clientX/Y，壳在菜单弹出前用 focusAt 定位（与 ProseMirror posAtCoords 同口径）。
+    window.addEventListener('contextmenu', function (event) {
+        window.__mdCtxPoint = [event.clientX, event.clientY];
+    }, true);
     // 拖入图片文件：Chromium 不会把文件路径交给页面（安全），但读得到字节，
     // 因此这里取 files[] → base64 → 宿主消息，落盘与插入由壳完成（磁盘写入只在壳）。
     function readBase64(file) {

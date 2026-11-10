@@ -33,6 +33,7 @@ public partial class DocumentWindow : Window
     bool _closingConfirmed;
 
     readonly MenuItem _recentMenu = new() { Header = "最近打开" };
+    readonly MenuItem _revealMenu = new() { Header = "在资源管理器中显示" };
     readonly MenuItem _sourceMenu = new() { Header = "源码模式", IsCheckable = true };
     readonly MenuItem _minimapMenu = new() { Header = "显示文档缩略图", IsCheckable = true };
     readonly MenuItem _drawerMenu = new() { Header = "文件抽屉", IsCheckable = true };
@@ -94,6 +95,7 @@ public partial class DocumentWindow : Window
             _host.DroppedImage += OnDroppedImage;
             await _host.InitializeAsync();
             _kernel = _host.Client;
+            InitializeContextMenu(_host.Core);
 
             var pending = _initialPath ?? _deferredPath;
             if (pending is not null && File.Exists(pending)) await OpenInitialAsync(pending);
@@ -1060,6 +1062,7 @@ public partial class DocumentWindow : Window
     {
         var name = _path is null ? "未命名" : Path.GetFileName(_path);
         Title = $"{name}{(_dirty ? " *" : "")} — {Product}";
+        _revealMenu.IsEnabled = _path is not null;
         UpdateState();
     }
 
@@ -1111,6 +1114,8 @@ public partial class DocumentWindow : Window
         file.Items.Add(new Separator());
         file.Items.Add(Item("保存", (_, _) => _ = SaveAsync(false), "Ctrl+S"));
         file.Items.Add(Item("另存为…", (_, _) => _ = SaveAsync(true), "Ctrl+Shift+S"));
+        _revealMenu.Click += (_, _) => RevealDocument();
+        file.Items.Add(_revealMenu);
         file.Items.Add(new Separator());
         file.Items.Add(Item("导出 PDF…", (_, _) => _ = ExportPdfAsync()));
         file.Items.Add(Item("导出 HTML…", (_, _) => _ = ExportHtmlAsync()));
@@ -1173,5 +1178,6 @@ public partial class DocumentWindow : Window
         foreach (var entry in themeMenu.Items.OfType<MenuItem>())
             entry.IsChecked = (string)entry.Header == expected;
         _minimapMenu.IsChecked = _settings.MinimapVisible;
+        _revealMenu.IsEnabled = _path is not null;
     }
 }

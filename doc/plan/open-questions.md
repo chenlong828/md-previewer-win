@@ -2,7 +2,7 @@
 layer: plan
 module: global
 status: current
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # 未决问题
@@ -20,6 +20,7 @@ updated: 2026-11-09
 | OQ-W9 | 缩略图默认值 | ✅ 已确认默认开（M1 交付，视图菜单可关，偏好跨窗口） | — |
 | OQ-W10 | Win10 1809 实机验证 | 待用户侧执行 | 本机只到 Win11 24H2；静态保障已做（DWM 调用失败即忽略、tar 打包、Runtime 检测提示），真机解压 zip 跑 `--diag info` + 打开/保存一次即可闭环 |
 | OQ-W11 | 壳内写 `HKCU\Software\Classes` 被拒 | 受限令牌所致，非代码问题 | 提供 `tools/associate.ps1` 等效入口，壳内异常转提示；普通用户会话下 `--install-association` 应正常 |
+| OQ-W12 | 右键菜单实机验收（复制路径 / 资源管理器定位 / 表格行列） | 代码、单测与窗口初始化已过；本会话桌面窗口在屏幕外，无法实际右键 | 用户在有桌面的会话右键一次；异常按 `history/works/2026-11-10-context-menu/review.md` §5 回退 |
 
 ## 已收敛（留档）
 
