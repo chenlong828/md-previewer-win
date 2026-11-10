@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="MDPreview" Width="1080" Height="760" WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource PageBg}" AllowDrop="True">
+        Background="{DynamicResource PageBg}" AllowDrop="True" Drop="OnWindowDrop" DragOver="OnWindowDragOver">
     <Window.Resources>
         <SolidColorBrush x:Key="ChromeBg" Color="#FFF6F6F6" />
         <SolidColorBrush x:Key="ChromeFg" Color="#FF1A1A1A" />
@@ -109,7 +109,8 @@
                           DragCompleted="OnDrawerSplitterDragCompleted" />
 
             <Grid Grid.Column="2">
-                <wv2:WebView2 x:Name="Web" />
+                <wv2:WebView2 x:Name="Web" AllowExternalDrop="False" AllowDrop="True"
+                              Drop="OnWindowDrop" DragOver="OnWindowDragOver" />
                 <Border x:Name="Overlay" Background="{DynamicResource PageBg}">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                         <TextBlock x:Name="OverlayText" Text="正在加载编辑器…" FontSize="14"

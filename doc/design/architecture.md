@@ -188,7 +188,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 绿色分发 | `dist/MDPreview/` + 便携 zip（打包即自检） | M4 ✅ |
 | `.md` 文件关联（用户级） | HKCU 写/撤销 + 备份还原，CLI 与脚本双入口 | M4 ✅ |
 | 应用图标 | `tools/make-icon.ps1` → `resources/app.ico`（7 尺寸） | M4 ✅ |
-| 拖入 `.md` 开窗 | 未实现（OQ-W14） | — |
+| 拖入 `.md`/目录/图片 | WPF Drop（`AllowExternalDrop=false`）直接拿路径；图片复用落盘/插入 | W-06 ✅ |
 
 ### 8.1 菜单、右键与目录模式（2026-11-10）
 
@@ -207,6 +207,9 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 - **剪贴板菜单项**：WPF 路由到不了 WebView2 子窗口，菜单关闭后还焦点并注入 `Ctrl+字母`。
 - **目录模式**：`_directoryRoot` 非空即目录模式；抽屉根唯一写入口 `SetDrawerRoot`；
   锚点菜单用纯函数 `DrawerAnchor.Chain`（盘符根 → 当前），激活刷新节流 2 s。
+- **拖入文件**：关闭 WebView2 的 `AllowExternalDrop`，由 WPF `Drop` 直接取 `FileDrop` 路径——
+  `.md` 开新窗口、目录进目录模式、图片走 `InsertImageFileAsync`（与菜单同一链路）。
+  失效条件：若 WPF 收不到 Drop，需回退 `AllowExternalDrop=true` 并恢复页面 base64 图片拖放。
 - **失效条件**：若改回浏览器加速键默认值，`Ctrl+P/G/Shift+G` 会被 Chromium 先消费，前导脚本
   收不到；若关闭 WebView2 默认菜单，剪切/复制/粘贴需壳自行实现（当前未做）。
 

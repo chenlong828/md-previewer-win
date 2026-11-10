@@ -57,6 +57,11 @@ public partial class DocumentWindow : Window
         ".md", ".markdown", ".mdown", ".mkd", ".mdx", ".txt", ".text",
     };
 
+    static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".tif", ".tiff", ".heic", ".avif",
+    };
+
     /// <summary>代码文件 = 非 Markdown 的可开文件；只读视图，不写盘。</summary>
     bool IsCodeDocument => _path is not null && !MarkdownExtensions.Contains(Path.GetExtension(_path));
 
@@ -447,10 +452,16 @@ public partial class DocumentWindow : Window
             CheckFileExists = true,
         };
         if (dialog.ShowDialog(this) != true) return;
+        await InsertImageFileAsync(dialog.FileName);
+    }
 
+    async Task InsertImageFileAsync(string path)
+    {
+        if (_kernel is null) return;
+        if (_path is null) { PromptSaveBeforeImage(); return; }
         try
         {
-            var imported = ImageStore.ImportFile(dialog.FileName, _path);
+            var imported = ImageStore.ImportFile(path, _path);
             await _kernel.SendAsync("insertImage", new JsonObject
             {
                 ["src"] = ImageStore.ToResourceUrl(imported.Path),
@@ -464,6 +475,40 @@ public partial class DocumentWindow : Window
             Log.Warn("image insert failed: " + ex.Message);
             MessageBox.Show(this, ImageStore.DescribeFailure(ex), "导入图片失败",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    void OnWindowDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// 拖入文件：WebView2 外部拖放关闭后路径由 WPF Drop 直接拿到——图片走同一落盘/插入链路，
+    /// `.md` 开新窗口，目录进入目录模式；不再经页面上传 base64。
+    /// </summary>
+    async void OnWindowDrop(object sender, DragEventArgs e)
+    {
+        if (e.Handled) return;
+        e.Handled = true;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+
+        foreach (var path in paths)
+        {
+            if (Directory.Exists(path))
+            {
+                App.Current.OpenDocument(path);
+                continue;
+            }
+            if (!File.Exists(path)) continue;
+            var extension = Path.GetExtension(path);
+            if (ImageExtensions.Contains(extension))
+            {
+                if (!IsCodeDocument && !IsDirectoryMode) await InsertImageFileAsync(path);
+                continue;
+            }
+            if (MarkdownExtensions.Contains(extension)) App.Current.OpenDocument(path);
         }
     }
 
