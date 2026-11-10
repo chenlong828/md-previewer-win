@@ -23,6 +23,19 @@ internal static class NativeMethods
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     internal static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
 
+    [DllImport("user32.dll")]
+    static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+
+    /// <summary>向当前前台窗口注入 Ctrl+字母（菜单栏剪贴板命令用，等价用户按快捷键）。</summary>
+    internal static void SendCtrl(int virtualKey)
+    {
+        const uint keyUp = 0x0002;
+        keybd_event(0x11, 0, 0, UIntPtr.Zero); // Ctrl down
+        keybd_event((byte)virtualKey, 0, 0, UIntPtr.Zero);
+        keybd_event((byte)virtualKey, 0, keyUp, UIntPtr.Zero);
+        keybd_event(0x11, 0, keyUp, UIntPtr.Zero);
+    }
+
     public static void ApplyWin11Look(Window window, bool dark)
     {
         var hwnd = new WindowInteropHelper(window).Handle;

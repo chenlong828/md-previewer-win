@@ -144,6 +144,10 @@ public partial class App : Application
                     Console.WriteLine(await window.DiagStateAsync());
                     exitCode = 0;
                     break;
+                case "menu":
+                    Console.WriteLine(await window.DiagMenuAsync());
+                    exitCode = 0;
+                    break;
                 case "export-html" when target is not null:
                     Console.WriteLine($"html bytes={await window.DiagExportHtmlAsync(target)} file={target}");
                     exitCode = 0;
@@ -178,6 +182,12 @@ public partial class App : Application
         };
         _windows.Add(window);
         window.Show();
+    }
+
+    /// <summary>全局行号偏好变更广播：所有已打开代码窗口即时生效。</summary>
+    public void ApplyCodeLineNumbersToAll(bool visible)
+    {
+        foreach (var window in _windows) window.ApplyCodeLineNumbers(visible);
     }
 
     public void ShutdownApp()

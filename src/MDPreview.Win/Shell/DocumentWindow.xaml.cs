@@ -38,6 +38,11 @@ public partial class DocumentWindow : Window
     readonly MenuItem _minimapMenu = new() { Header = "显示文档缩略图", IsCheckable = true };
     readonly MenuItem _drawerMenu = new() { Header = "文件抽屉", IsCheckable = true };
     readonly MenuItem _languageMenu = new() { Header = "代码语言" };
+    readonly MenuItem _formatMenu = new() { Header = "格式(_O)" };
+    readonly MenuItem _tableMenu = new() { Header = "表格" };
+    readonly MenuItem _lineNumbersMenu = new() { Header = "显示行号", IsCheckable = true };
+    readonly List<MenuItem> _themeItems = [];
+    bool _inTable;
 
     static readonly object DrawerPlaceholder = new();
     string? _drawerRoot;
@@ -333,6 +338,10 @@ public partial class DocumentWindow : Window
             case "sourceMode":
                 _sourceMenu.IsChecked = payload["value"]?.GetValue<bool>() ?? false;
                 break;
+            case "selinfo":
+                _inTable = payload["inTable"]?.GetValue<bool>() ?? false;
+                UpdateDocumentMenuState();
+                break;
             case "jserror":
                 Log.Warn("kernel js error: " + payload["message"]);
                 break;
@@ -522,6 +531,9 @@ public partial class DocumentWindow : Window
             "saveAs" => SaveAsync(true),
             "close" => CloseWindowAsync(),
             "find" => RunOpAsync("openFindBar"),
+            "findNext" => RunOpAsync("findNext"),
+            "findPrev" => RunOpAsync("findPrev"),
+            "print" => PrintAsync(),
             "toggleSource" => RunOpAsync("toggleSource"),
             "toggleDrawer" => ToggleDrawerAsync(),
             "zoomIn" => ZoomByAsync(0.1),
@@ -1062,7 +1074,7 @@ public partial class DocumentWindow : Window
     {
         var name = _path is null ? "未命名" : Path.GetFileName(_path);
         Title = $"{name}{(_dirty ? " *" : "")} — {Product}";
-        _revealMenu.IsEnabled = _path is not null;
+        UpdateDocumentMenuState();
         UpdateState();
     }
 
@@ -1119,38 +1131,43 @@ public partial class DocumentWindow : Window
         file.Items.Add(new Separator());
         file.Items.Add(Item("导出 PDF…", (_, _) => _ = ExportPdfAsync()));
         file.Items.Add(Item("导出 HTML…", (_, _) => _ = ExportHtmlAsync()));
+        file.Items.Add(Item("打印…", (_, _) => PrintDocument(), "Ctrl+P"));
         file.Items.Add(new Separator());
         file.Items.Add(Item("关闭窗口", (_, _) => _ = CloseWindowAsync(), "Ctrl+W"));
         file.Items.Add(Item("退出", (_, _) => App.Current.ShutdownApp()));
 
         var edit = new MenuItem { Header = "编辑(_E)" };
-        edit.Items.Add(Item("撤销", (_, _) => _ = RunOpAsync("undo"), "Ctrl+Z"));
-        edit.Items.Add(Item("重做", (_, _) => _ = RunOpAsync("redo"), "Ctrl+Y"));
-        edit.Items.Add(new Separator());
-        edit.Items.Add(Item("插入图片…", (_, _) => _ = InsertImageFromDialogAsync(), "Ctrl+Shift+I"));
-        edit.Items.Add(new Separator());
-        edit.Items.Add(Item("查找…", (_, _) => _ = RunOpAsync("openFindBar"), "Ctrl+F"));
-        _sourceMenu.Click += (_, _) => _ = RunOpAsync("toggleSource");
-        edit.Items.Add(_sourceMenu);
+        AddGroup(edit, EditorCommands.UndoGroup, separatorBefore: false);
+        AddGroup(edit, EditorCommands.ClipboardGroup);
+        AddGroup(edit, EditorCommands.FindGroup);
 
         var view = new MenuItem { Header = "视图(_V)" };
-        var theme = new MenuItem { Header = "主题" };
-        theme.Items.Add(Item("跟随系统", (_, _) => _ = SetThemeAsync("system"), checkable: true));
-        theme.Items.Add(Item("浅色", (_, _) => _ = SetThemeAsync("light"), checkable: true));
-        theme.Items.Add(Item("深色", (_, _) => _ = SetThemeAsync("dark"), checkable: true));
-        view.Items.Add(theme);
         var zoom = new MenuItem { Header = "缩放" };
         zoom.Items.Add(Item("放大", (_, _) => _ = ZoomByAsync(0.1), "Ctrl++"));
         zoom.Items.Add(Item("缩小", (_, _) => _ = ZoomByAsync(-0.1), "Ctrl+-"));
         zoom.Items.Add(Item("重置", (_, _) => _ = SetZoomAsync(1.0), "Ctrl+0"));
         view.Items.Add(zoom);
+        view.Items.Add(new Separator());
+        _sourceMenu.Click += (_, _) => _ = RunOpAsync("toggleSource");
+        view.Items.Add(_sourceMenu);
+        _lineNumbersMenu.Click += (_, _) => ToggleLineNumbers();
+        view.Items.Add(_lineNumbersMenu);
         _minimapMenu.Click += (_, _) => _ = ToggleMinimapAsync();
         view.Items.Add(_minimapMenu);
         _drawerMenu.Click += (_, _) => ToggleDrawer();
         view.Items.Add(_drawerMenu);
+        view.Items.Add(new Separator());
         BuildLanguageMenu(_languageMenu);
         _languageMenu.SubmenuOpened += (_, _) => UpdateLanguageMenuChecks();
         view.Items.Add(_languageMenu);
+        var theme = new MenuItem { Header = "主题" };
+        foreach (var (header, value) in new[] { ("跟随系统", "system"), ("浅色", "light"), ("深色", "dark") })
+        {
+            var item = Item(header, (_, _) => _ = SetThemeAsync(value), checkable: true);
+            _themeItems.Add(item);
+            theme.Items.Add(item);
+        }
+        view.Items.Add(theme);
 
         var help = new MenuItem { Header = "帮助(_H)" };
         help.Items.Add(Item("打开日志目录", (_, _) =>
@@ -1164,20 +1181,80 @@ public partial class DocumentWindow : Window
 
         MainMenu.Items.Add(file);
         MainMenu.Items.Add(edit);
+        MainMenu.Items.Add(BuildFormatMenu());
         MainMenu.Items.Add(view);
         MainMenu.Items.Add(help);
         UpdateRecentMenu();
         UpdateMenuChecks();
     }
 
+    MenuItem Item(EditorCommand command)
+    {
+        var item = new MenuItem { Header = command.Title };
+        if (command.Gesture is not null) item.InputGestureText = command.Gesture;
+        item.Click += (_, _) => ExecuteEditorCommand(command);
+        return item;
+    }
+
+    void AddGroup(ItemsControl parent, IReadOnlyList<EditorCommand> group, bool separatorBefore = true)
+    {
+        if (group.Count == 0) return;
+        if (separatorBefore && parent.Items.Count > 0) parent.Items.Add(new Separator());
+        foreach (var command in group) parent.Items.Add(Item(command));
+    }
+
+    MenuItem BuildFormatMenu()
+    {
+        _formatMenu.Items.Clear();
+        AddGroup(_formatMenu, EditorCommands.InlineFormatGroup, separatorBefore: false);
+        AddGroup(_formatMenu, EditorCommands.HeadingGroup);
+        AddGroup(_formatMenu, EditorCommands.BlockGroup);
+        AddGroup(_formatMenu, EditorCommands.InsertBlockGroup);
+
+        _tableMenu.Items.Clear();
+        foreach (var command in EditorCommands.TableInsertGroup) _tableMenu.Items.Add(Item(command));
+        _tableMenu.Items.Add(new Separator());
+        foreach (var command in EditorCommands.TableDeleteGroup) _tableMenu.Items.Add(Item(command));
+        _formatMenu.Items.Add(new Separator());
+        _formatMenu.Items.Add(_tableMenu);
+        _formatMenu.Items.Add(Item(EditorCommands.InsertHr));
+        _formatMenu.Items.Add(new Separator());
+        _formatMenu.Items.Add(Item(EditorCommands.InsertImage));
+        return _formatMenu;
+    }
+
+    void ToggleLineNumbers()
+    {
+        if (!IsCodeDocument) return;
+        _settings.CodeLineNumbers = !_settings.CodeLineNumbers;
+        _settings.Save();
+        App.Current.ApplyCodeLineNumbersToAll(_settings.CodeLineNumbers);
+    }
+
+    /// <summary>全局行号偏好变更：本窗口勾选态与代码视图即时同步（非代码窗口只更新勾选）。</summary>
+    internal void ApplyCodeLineNumbers(bool visible)
+    {
+        _lineNumbersMenu.IsChecked = visible;
+        if (IsCodeDocument && _kernel is not null)
+            _ = _kernel.SendAsync("setCodeLineNumbers", new JsonObject { ["visible"] = visible });
+    }
+
+    void UpdateDocumentMenuState()
+    {
+        var code = IsCodeDocument;
+        _formatMenu.IsEnabled = !code;
+        _sourceMenu.IsEnabled = !code;
+        _lineNumbersMenu.IsEnabled = code;
+        _tableMenu.IsEnabled = !code && _inTable;
+        _revealMenu.IsEnabled = _path is not null;
+    }
+
     void UpdateMenuChecks()
     {
-        var theme = (MenuItem)MainMenu.Items[2];
-        var themeMenu = (MenuItem)theme.Items[0];
         var expected = _settings.Theme switch { "dark" => "深色", "light" => "浅色", _ => "跟随系统" };
-        foreach (var entry in themeMenu.Items.OfType<MenuItem>())
-            entry.IsChecked = (string)entry.Header == expected;
+        foreach (var entry in _themeItems) entry.IsChecked = (string)entry.Header == expected;
         _minimapMenu.IsChecked = _settings.MinimapVisible;
-        _revealMenu.IsEnabled = _path is not null;
+        _lineNumbersMenu.IsChecked = _settings.CodeLineNumbers;
+        UpdateDocumentMenuState();
     }
 }

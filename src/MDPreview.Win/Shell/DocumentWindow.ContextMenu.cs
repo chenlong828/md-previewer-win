@@ -36,8 +36,8 @@ public partial class DocumentWindow
             item.CustomItemSelected += (sender, _) => OnContextItemSelected(sender as CoreWebView2ContextMenuItem);
             _contextItems[command.Id] = item;
         }
-        // 文件组 / 插入行列组 / 删除组各一条分隔线；固定复用，避免耗尽 1000 项配额。
-        _contextSeparators = Enumerable.Range(0, 3)
+        // 文件组、查找/源码、格式、插入、表格插入、表格删除各一条分隔线；固定复用，避免耗尽 1000 项配额。
+        _contextSeparators = Enumerable.Range(0, 6)
             .Select(_ => core.Environment.CreateContextMenuItem(
                 "", null, CoreWebView2ContextMenuItemKind.Separator))
             .ToArray();
@@ -143,8 +143,7 @@ public partial class DocumentWindow
                 RevealDocument();
                 break;
             default:
-                if (command.Op is not null)
-                    _ = RunOpAsync(command.Op, new JsonObject { ["name"] = command.OpName });
+                ExecuteEditorCommand(command);
                 break;
         }
     }

@@ -57,7 +57,8 @@
     // 只拦壳有语义的组合，编辑键（撤销/复制/粘贴/查找输入）保持浏览器原生行为。
     var shellShortcuts = {
         's': 'save', 'S': 'saveAs', 'o': 'open', 'n': 'new', 'w': 'close',
-        'f': 'find', '/': 'toggleSource', '\\': 'toggleDrawer',
+        'f': 'find', 'g': 'findNext', 'G': 'findPrev', 'p': 'print',
+        '/': 'toggleSource', '\\': 'toggleDrawer',
         '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '0': 'zoomReset'
     };
     window.addEventListener('keydown', function (event) {
