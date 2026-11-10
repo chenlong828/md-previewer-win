@@ -2,7 +2,7 @@
 layer: design
 module: global
 status: current
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # Windows 版系统架构与取舍
@@ -80,7 +80,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | `CMP-app-shell` | 窗口、菜单（命令注册表驱动格式/表格/剪贴板/查找）、最近文件、单实例、主题/缩放、缩略图与行号偏好、目录模式 |
 | `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、同源资源前缀、CSP、上下文菜单追加项 |
 | `CMP-document-io` | 读写、编码检测、原子写、尾换行、外部修改监听 |
-| `CMP-drawer` | 目录树抽屉：根=文档目录或目录模式根、懒加载、锚点祖先链、上级/用户目录切换、宽度拖拽、双击开新窗口、激活节流 rescan；**默认打开**，三个入口（状态栏「☰ 文件」按钮、视图菜单、Ctrl+\），宽度与开关持久化 |
+| `CMP-drawer` | 目录树抽屉：根=文档目录或目录模式根、懒加载、锚点祖先链、上级/用户目录切换、宽度拖拽、双击同窗覆盖并保持锚点、激活节流 rescan；**默认打开**，三个入口（状态栏「☰ 文件」按钮、视图菜单、Ctrl+\），宽度与开关持久化 |
 | `CMP-image-store` | 图片落盘：`resource/<文档名>/`、`img_NNN` 序号命名、原名冲突加序号、关闭时 GC |
 | `CMP-code-view` | 代码只读视图：`resources/languages.json` 扩展名 → 语言 id、行号、>2 MB 降级纯文本、不写盘 |
 | `CMP-export` | 导出 PDF（`PrintToPdfAsync`，背景/页边距）、单文件 HTML（内核 `exportStandaloneHTML`）与浏览器打印 |
@@ -207,6 +207,11 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 - **剪贴板菜单项**：WPF 路由到不了 WebView2 子窗口，菜单关闭后还焦点并注入 `Ctrl+字母`。
 - **目录模式**：`_directoryRoot` 非空即目录模式；抽屉根唯一写入口 `SetDrawerRoot`；
   锚点菜单用纯函数 `DrawerAnchor.Chain`（盘符根 → 当前），激活刷新节流 2 s。
+- **打开路由**：同窗覆盖打开的唯一入口是 `DocumentWindow.OpenPathAsync(path, reanchor)`——
+  脏文档先走与关闭同一套保存确认，打开文件即退出目录模式；抽屉双击传 `reanchor:false`，
+  文件仍在锚点子树内时保持锚点（`DrawerAnchor.RootAfterOpen`），离开锚点才重锚；Ctrl+O 等
+  默认 `reanchor:true`，一律锚到文件所在目录。外部打开（CLI/拖放/资源管理器/「打开文件夹」）
+  仍是新窗口。
 - **拖入文件**：关闭 WebView2 的 `AllowExternalDrop`，由 WPF `Drop` 直接取 `FileDrop` 路径——
   `.md` 开新窗口、目录进目录模式、图片走 `InsertImageFileAsync`（与菜单同一链路）。
   失效条件：若 WPF 收不到 Drop，需回退 `AllowExternalDrop=true` 并恢复页面 base64 图片拖放。
@@ -214,7 +219,8 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   收不到；若关闭 WebView2 默认菜单，剪切/复制/粘贴需壳自行实现（当前未做）。
 
 > 自检样例：`MDPreview.exe --diag state <file.md>`、`--diag code <file.cs>`、`--diag menu <file>`、
-> `--diag dir <目录>`、`--diag export-html <src.md> <out.html>`、`--diag export-pdf <src.md> <out.pdf>`；
+> `--diag dir <目录>`、`--diag open <目录> <文件>`（目录模式后模拟抽屉双击同窗打开）、
+> `--diag export-html <src.md> <out.html>`、`--diag export-pdf <src.md> <out.pdf>`；
 > 结果写 stdout，退出码 0=成功。适合无桌面（远程/CI）时验收。
 
 ## 9. 构建与分发

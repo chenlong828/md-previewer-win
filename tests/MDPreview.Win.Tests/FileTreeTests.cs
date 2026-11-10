@@ -67,4 +67,25 @@ public sealed class FileTreeTests : IDisposable
         Assert.Equal(home, FileTree.RootFor(null));
         Assert.Equal(home, FileTree.RootFor(Path.Combine(_dir, "missing", "x.md")));
     }
+
+    [Fact]
+    public void IsWithin_accepts_descendants_and_rejects_sibling_prefixes()
+    {
+        Assert.True(FileTree.IsWithin(_dir, Path.Combine(_dir, "a.md")));
+        Assert.True(FileTree.IsWithin(_dir, Path.Combine(_dir, "chapters", "c1.md")));
+        Assert.True(FileTree.IsWithin(_dir.ToUpperInvariant(), Path.Combine(_dir, "chapters", "c1.md")));
+
+        var sibling = _dir + "-sibling";
+        Directory.CreateDirectory(sibling);
+        try
+        {
+            var outside = Path.Combine(sibling, "x.md");
+            File.WriteAllText(outside, "# x");
+            Assert.False(FileTree.IsWithin(_dir, outside));
+        }
+        finally
+        {
+            Directory.Delete(sibling, recursive: true);
+        }
+    }
 }

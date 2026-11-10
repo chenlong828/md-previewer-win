@@ -91,6 +91,8 @@ public partial class App : Application
     //
     //   MDPreview.exe --diag info
     //   MDPreview.exe --diag code <源文件>
+    //   MDPreview.exe --diag dir <目录>
+    //   MDPreview.exe --diag open <目录> <文件>   （先目录模式，再模拟抽屉双击同窗打开）
     //   MDPreview.exe --diag export-html <源文件> <目标.html>
     //   MDPreview.exe --diag export-pdf  <源文件> <目标.pdf>
     //
@@ -150,6 +152,10 @@ public partial class App : Application
                     break;
                 case "dir":
                     Console.WriteLine(await window.DiagDirectoryAsync());
+                    exitCode = 0;
+                    break;
+                case "open" when target is not null:
+                    Console.WriteLine(await window.DiagDrawerOpenAsync(target));
                     exitCode = 0;
                     break;
                 case "export-html" when target is not null:

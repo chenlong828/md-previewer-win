@@ -12,9 +12,9 @@ doc/
 │   ├── REQ-0001-file-drawer.md … REQ-0011-document-minimap.md
 │   └── REQ-0012-copy-file-path.md / REQ-0013-reveal-in-finder.md
 ├── plan/                             ← 调度：接下来做什么
-│   ├── roadmap.md                    ← M0–M5（M1–M5 已交付）
+│   ├── roadmap.md                    ← M0–M5（M1–M5 已交付；W-01…W-07 收口）
 │   ├── risks.md                      ← R-W1…R-W9
-│   └── open-questions.md             ← OQ-W1…OQ-W15
+│   └── open-questions.md             ← OQ-W1…OQ-W16
 ├── design/                           ← 真相：系统现在是什么
 │   └── architecture.md               ← Windows 版架构（current）
 ├── works/                            ← 执行：正在做什么（新工序在此立项）
@@ -22,7 +22,8 @@ doc/
     ├── decisions/2026-10-21-editor-kernel-spec.md   ← 内核/壳分层与 v2 契约（上游存档）
     ├── works/2026-11-04-kernel-v2/                  ← 上游 v2 落地记录（含 spec-delta）
     ├── works/2026-11-04-windows-port/               ← Windows 移植 M1–M4（brief/result/选型提案）
-    ├── works/2026-11-10-*/                          ← M5 五个工序（内核同步/右键/菜单/目录/发布）
+    ├── works/2026-11-10-*/                          ← M5 工序（内核同步/右键/菜单/目录/发布/拖入）
+    ├── works/2026-11-11-drawer-open-same-window/    ← W-07 抽屉双击同窗修正
     └── pitfalls.md                                  ← 踩过的坑（同步自上游）
 ```
 

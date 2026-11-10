@@ -244,7 +244,12 @@ public partial class DocumentWindow : Window
 
     // ---------------------------------------------------------------- 打开 / 保存
 
-    public async Task OpenPathAsync(string path)
+    /// <summary>
+    /// 在当前窗口覆盖打开文档：脏文档先走与关闭同一套「保存/不保存/取消」确认。
+    /// <paramref name="reanchor"/> 与 macOS <c>openDocument(at:reanchor:)</c> 同义——抽屉双击传
+    /// false（保持锚点），Ctrl+O 等外部来源用默认 true（重锚到文件所在目录）。
+    /// </summary>
+    public async Task OpenPathAsync(string path, bool reanchor = true)
     {
         if (!File.Exists(path))
         {
@@ -252,22 +257,26 @@ public partial class DocumentWindow : Window
             return;
         }
         if (_kernel is null) { _deferredPath = path; return; }
+        if (!await ConfirmDiscardAsync()) return;
 
+        _directoryRoot = null; // 打开文件即退出目录模式（与 macOS openDocument 同口径）
         try
         {
             if (!MarkdownExtensions.Contains(Path.GetExtension(path)))
             {
                 await LoadCodeAsync(path);
+                _lastWriteUtc = File.GetLastWriteTimeUtc(path);
                 _settings.AddRecent(path);
                 UpdateRecentMenu();
                 StartWatcher(path);
-                if (_settings.DrawerVisible) LoadDrawerRoot();
+                UpdateDrawerForOpen(path, reanchor);
                 return;
             }
 
             var doc = TextFile.Read(path);
             _doc = doc;
             _path = path;
+            _codeLoaded = false;
             _lastWriteUtc = File.GetLastWriteTimeUtc(path);
             await _kernel.SendAsync("setBaseDir", new JsonObject { ["path"] = Path.GetDirectoryName(path)! });
             await _kernel.SendAsync("setMarkdown", new JsonObject
@@ -281,7 +290,7 @@ public partial class DocumentWindow : Window
             UpdateTitle();
             UpdateRecentMenu();
             StartWatcher(path);
-            if (_settings.DrawerVisible) LoadDrawerRoot();
+            UpdateDrawerForOpen(path, reanchor);
             Log.Info("opened " + path);
         }
         catch (Exception ex)
@@ -289,6 +298,18 @@ public partial class DocumentWindow : Window
             MessageBox.Show(this, "打开失败：" + ex.Message, Product, MessageBoxButton.OK, MessageBoxImage.Error);
             Log.Error("open failed", ex);
         }
+    }
+
+    /// <summary>打开文档后的抽屉刷新：按来源决定锚点，再重载树并选中当前文档。</summary>
+    void UpdateDrawerForOpen(string path, bool reanchor)
+    {
+        var root = DrawerAnchor.RootAfterOpen(_drawerRoot, path, reanchor);
+        if (!string.Equals(root, _drawerRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            SetDrawerRoot(root); // 锚点变了：即使抽屉暂时隐藏也更新，展开时才是正确根
+            return;
+        }
+        if (_settings.DrawerVisible) ReloadDrawerTree();
     }
 
     async Task NewDocumentAsync()
@@ -772,7 +793,7 @@ public partial class DocumentWindow : Window
         }
     }
 
-    void OnDrawerDoubleClick(object sender, MouseButtonEventArgs e)
+    async void OnDrawerDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (DrawerTree.SelectedItem is not TreeViewItem item || item.Tag is not FileEntry entry) return;
         if (entry.IsDirectory)
@@ -782,7 +803,8 @@ public partial class DocumentWindow : Window
         }
         if (entry.Path == _path) return;
         e.Handled = true;
-        App.Current.OpenDocument(entry.Path); // 一文档一窗口：在抽屉里点文件 = 开新窗口
+        // 同窗覆盖且保持锚点（与 macOS FileDrawerView.onOpenFile → openDocument(reanchor:false) 同口径）
+        await OpenPathAsync(entry.Path, reanchor: false);
     }
 
     void OnDrawerUpClick(object sender, RoutedEventArgs e)

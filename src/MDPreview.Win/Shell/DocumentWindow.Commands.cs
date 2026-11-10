@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MDPreview.Win.Io;
 
 namespace MDPreview.Win.Shell;
 
@@ -134,6 +135,18 @@ public partial class DocumentWindow
         var root = _directoryRoot ?? "";
         return Task.FromResult(
             $"directory={root} title={Title} entries={DrawerTree.Items.Count} drawer={_settings.DrawerVisible} root={_drawerRoot}");
+    }
+
+    /// <summary>
+    /// 诊断：以抽屉双击同一路径（<c>reanchor:false</c>）打开文件，报告同窗覆盖后的状态。
+    /// 断言点：标题/路径换成该文件、目录模式退出、锚点仍为原抽屉根、树选中该文件。
+    /// </summary>
+    internal async Task<string> DiagDrawerOpenAsync(string file)
+    {
+        await OpenPathAsync(file, reanchor: false);
+        var selected = (DrawerTree.SelectedItem as TreeViewItem)?.Tag as FileEntry;
+        return $"path={_path} title={Title} directory={_directoryRoot ?? ""} root={_drawerRoot} " +
+               $"entries={DrawerTree.Items.Count} selected={selected?.Path ?? ""}";
     }
 
     /// <summary>诊断：输出当前菜单树的条目、勾选与可用态（无界面验收菜单结构）。</summary>

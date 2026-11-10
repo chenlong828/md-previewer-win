@@ -2,7 +2,7 @@
 layer: plan
 module: global
 status: current
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 里程碑路线图（Windows 移植）
@@ -35,6 +35,7 @@ updated: 2026-11-10
 | W-04 `2026-11-10-directory-drawer` | 打开文件夹/目录模式、抽屉锚点菜单与激活 rescan、拖入 `.md` 开窗 | 壳 | W-03 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-directory-drawer/result.md)；拖入 `.md` 见 OQ-W14、实机见 OQ-W15） |
 | W-05 `2026-11-10-release-docs` | README/版本 0.6.0、REQ 与场景收口、architecture 回写、工序归档 | 文档 | W-01–W-04 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-release-docs/result.md)） |
 | W-06 `2026-11-10-drag-drop` | 拖入 `.md`/目录/图片：WPF Drop + 关闭 WebView2 外部拖放 | 壳 | W-04 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-drag-drop/result.md)；实机见 OQ-W14） |
+| W-07 `2026-11-11-drawer-open-same-window` | 抽屉双击改为同窗覆盖并保持锚点（对齐 SCN-0001/REQ-0006，纠正误实现为新窗） | 壳 | W-04 | ✅ 2026-11-11（[已归档](../history/works/2026-11-11-drawer-open-same-window/result.md)；真实双击见 OQ-W15） |
 
 > M5 代码与文档已收口（2026-11-10）：内核 0.6.0、右键菜单、格式/表格菜单、目录模式、拖入文件全部落地；实机验收见 OQ-W12–W15，拖入实机见 OQ-W14。新增组件/行为以 `design/architecture.md` §8.1 为准。
 
