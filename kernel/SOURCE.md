@@ -6,7 +6,7 @@
 | 项 | 值 |
 |---|---|
 | 上游仓库 | `https://github.com/chenlong828/md-previewer.git` |
-| 快照 commit | `64ba91b`（2026-11-05，fix(minimap): 长文缩略图裁切与视口跟手） |
+| 快照 commit | `05493a3`（2026-11-10，chore(release): 0.6.0；内核增量含表格插入光标跟随/`focusAt` 聚焦/`tableInfo` 行列号） |
 | 复制范围 | `web/src/`、`web/test/`、`build.mjs`、`check-kernel.mjs`、`check-deps.mjs`、`package.json`、`eslint.config.js` |
 | 未复制 | `web/node_modules`、`web/dist`（构建产物）、macOS 壳 `Sources/` |
 | 协议 | v2：41 op / 7 通知 / 2 内核请求 / 5 错误码 |
