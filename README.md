@@ -10,8 +10,8 @@
 
 ## 现状
 
-上游 `md-previewer@64ba91b` 已于 2026-11-04 完成内核 v2 重构与组件拆分，并交付右侧文档
-缩略图。Windows 侧因此不再重建内核，直接以快照方式接入，只补一处平台接缝（路径/URL 策略）。
+上游 `md-previewer@05493a3`（v0.6.0，2026-11-10）已包含内核 v2、右侧缩略图与右键文件动作。
+Windows 侧以快照方式接入，2026-11-10 完成 M5 全量对齐：菜单栏、右键菜单、目录模式与行号开关。
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
@@ -20,6 +20,18 @@
 | M2 浏览与媒体 | 文件抽屉、图片粘贴/拖放、导入 GC | ✅ 2026-11-05 |
 | M3 阅读与输出 | 代码视图（44 语言）、导出 PDF/HTML、诊断子命令 | ✅ 2026-11-05 |
 | M4 分发 | 便携 zip、文件关联、图标 | ✅ 2026-11-05 |
+| M5 全量对齐 | 内核 0.6.0 同步、右键菜单、格式/表格菜单、目录模式与抽屉 | ✅ 2026-11-10 |
+
+## 主要功能
+
+- **所见即所得 Markdown**：GFM 表格、任务列表、删除线、引用、代码块、图片、链接、分割线。
+- **公式与图表**：KaTeX 行内/块级公式；Mermaid 图表，点击即可改源码。
+- **右侧文档缩略图**：Markdown 与代码只读面，滚动跟手、点击/拖动定位。
+- **只读代码查看**：44 种语言高亮、行号、软换行、当前行高亮，>2 MB 降级纯文本。
+- **原生文件工作流**：文件抽屉/目录模式、多窗口、最近文件、外部修改监听；右键复制
+  当前文件路径、资源管理器定位；表格内右键插入/删除行列。
+- **编辑与输出**：格式菜单（加粗/标题/列表/表格/公式/分割线）、查找、源码模式、
+  行号开关、PDF/HTML/打印、深浅色跟随系统与缩放记忆。
 
 ## 架构
 
@@ -70,15 +82,15 @@ dist/MDPreview/MDPreview.exe --diag export-pdf samples/功能演示.md out.pdf
 - **架构真相** → [doc/design/architecture.md](doc/design/architecture.md)
 - **里程碑与风险** → [doc/plan/roadmap.md](doc/plan/roadmap.md) ·
   [risks.md](doc/plan/risks.md) · [open-questions.md](doc/plan/open-questions.md)
-- **需求** → [doc/requirements/](doc/requirements/)（11 张，同步自上游）
-- **当前工序** → `doc/works/`（M1–M4 已收口，记录归档在
-  [history/works/2026-11-04-windows-port/](doc/history/works/2026-11-04-windows-port/)）
+- **需求** → [doc/requirements/](doc/requirements/)（13 张，同步自上游）
+- **当前工序** → `doc/works/`（M1–M5 已收口，记录归档在
+  [history/works/](doc/history/works/)）
 - **选型提案** → [decision-proposal.md](doc/history/works/2026-11-04-windows-port/decision-proposal.md)
 - **导航与开发规范** → [doc/README.md](doc/README.md) · [AGENTS.md](AGENTS.md) ·
   [.agents/skills/](.agents/skills/)
 
 ## 与上游的关系
 
-- 只读上游：`kernel/` 是 `md-previewer@64ba91b` 的 `web/` 快照，差异记在 `kernel/SOURCE.md`。
+- 只读上游：`kernel/` 是 `md-previewer@05493a3` 的 `web/` 快照，差异记在 `kernel/SOURCE.md`。
 - 文档：技能与需求卡同步；场景/组件规格在 Windows 侧实现时另写，未实现前只链上游，避免「假真相」。
 - 许可：MIT，见 [LICENSE](LICENSE)。

@@ -2,14 +2,14 @@
 layer: design
 module: global
 status: current
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # Windows 版系统架构与取舍
 
-> 上游基线：`md-previewer@64ba91b`（内核 v2 + 组件拆分 + 文档缩略图已交付）。
+> 上游基线：`md-previewer@05493a3`（v0.6.0；内核 v2 + 组件拆分 + 缩略图 + 右键文件动作）。
 > 本文是 Windows 侧的现行技术真相；壳选型已于 2026-11-05 确认为 WPF + WebView2，
-> M1–M4 已交付（工序记录见 `../history/works/2026-11-04-windows-port/`）。
+> M1–M5 已交付（工序记录见 `../history/works/`）。
 
 ## 1. 移植策略
 
@@ -77,14 +77,14 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 | 组件 | 职责 |
 |---|---|
-| `CMP-app-shell` | 窗口、菜单、最近文件、单实例、主题/缩放、缩略图偏好 |
-| `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、同源资源前缀、CSP、上下文菜单 |
+| `CMP-app-shell` | 窗口、菜单（命令注册表驱动格式/表格/剪贴板/查找）、最近文件、单实例、主题/缩放、缩略图与行号偏好、目录模式 |
+| `CMP-shell-bridge` | WebView2 宿主、`KernelClient`、同源资源前缀、CSP、上下文菜单追加项 |
 | `CMP-document-io` | 读写、编码检测、原子写、尾换行、外部修改监听 |
-| `CMP-drawer` | 目录树抽屉：根=文档目录、懒加载、上级/用户目录切换、宽度拖拽、双击开新窗口；**默认打开**，三个入口（状态栏「☰ 文件」按钮、视图菜单、Ctrl+\），宽度与开关持久化 |
+| `CMP-drawer` | 目录树抽屉：根=文档目录或目录模式根、懒加载、锚点祖先链、上级/用户目录切换、宽度拖拽、双击开新窗口、激活节流 rescan；**默认打开**，三个入口（状态栏「☰ 文件」按钮、视图菜单、Ctrl+\），宽度与开关持久化 |
 | `CMP-image-store` | 图片落盘：`resource/<文档名>/`、`img_NNN` 序号命名、原名冲突加序号、关闭时 GC |
 | `CMP-code-view` | 代码只读视图：`resources/languages.json` 扩展名 → 语言 id、行号、>2 MB 降级纯文本、不写盘 |
-| `CMP-export` | 导出 PDF（`PrintToPdfAsync`，背景/页边距）与单文件 HTML（内核 `exportStandaloneHTML`） |
-| `CMP-diagnostics` | `--diag info/code/state/export-html/export-pdf`：无界面自检，结果走 stdout，退出码 0/1 |
+| `CMP-export` | 导出 PDF（`PrintToPdfAsync`，背景/页边距）、单文件 HTML（内核 `exportStandaloneHTML`）与浏览器打印 |
+| `CMP-diagnostics` | `--diag info/code/state/menu/dir/export-html/export-pdf`：无界面自检，结果走 stdout，退出码 0/1 |
 
 内核（`kernel/`，vendor，不改结构）：
 
@@ -176,17 +176,42 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 | 主题（跟系统）、缩放 | 同构 | M1 |
 | 右侧文档缩略图（Markdown/代码） | 内核自带，壳给偏好与菜单 | M1（Markdown）/ M3 ✅（代码面 `minimapInfo` 印证 `surface:code`） |
 | 图片显示、粘贴/拖放导入、GC | 同构（同源资源前缀 + 壳落盘） | M2 ✅ |
-| 文件抽屉、目录模式 | 同构（懒加载目录树 + 上级/用户目录） | M2 ✅ |
+| 文件抽屉 | 同构（懒加载目录树 + 上级/用户/锚点切换 + 激活 rescan） | M2 / W-04 ✅ |
+| 目录模式（CLI 目录 / 打开文件夹） | 空编辑器 + 抽屉，标题与状态显示目录名 | W-04 ✅ |
+| 菜单栏（格式/表格/剪贴板/查找） | 命令注册表统一驱动；表格组按 `selinfo` 启停 | W-02 / W-03 ✅ |
+| 文档右键（复制路径/资源管理器定位/表格行列） | WebView2 默认菜单追加自定义项 | W-02 ✅ |
 | 代码只读视图、行号、语言切换 | 同构（44 语言表 + 只读、不写盘、>2 MB 降级） | M3 ✅ |
+| 行号开关（全局偏好） | 视图菜单，跨窗口广播 | W-03 ✅ |
 | 查找、源码模式 | 同构（`openFindBar`/`findInfo`、`toggleSource` 往返自检） | M3 ✅ |
-| PDF/HTML/打印 | `PrintToPdfAsync` + 内核 `exportStandaloneHTML` | M3 ✅ |
-| 诊断（自检/截图/日志） | `--diag info/code/state/export-html/export-pdf` | M3 ✅ |
+| PDF/HTML/打印 | `PrintToPdfAsync` + 内核 `exportStandaloneHTML` + `ShowPrintUI` | M3 / W-03 ✅ |
+| 诊断（自检/截图/日志） | `--diag info/code/state/menu/dir/export-html/export-pdf` | M3 / W-03–W-04 ✅ |
 | 绿色分发 | `dist/MDPreview/` + 便携 zip（打包即自检） | M4 ✅ |
 | `.md` 文件关联（用户级） | HKCU 写/撤销 + 备份还原，CLI 与脚本双入口 | M4 ✅ |
 | 应用图标 | `tools/make-icon.ps1` → `resources/app.ico`（7 尺寸） | M4 ✅ |
+| 拖入 `.md` 开窗 | 未实现（OQ-W14） | — |
 
-> 自检样例：`MDPreview.exe --diag state <file.md>`、`--diag code <file.cs>`、
-> `--diag export-html <src.md> <out.html>`、`--diag export-pdf <src.md> <out.pdf>`；
+### 8.1 菜单、右键与目录模式（2026-11-10）
+
+- **命令注册表单源**：`Shell/EditorCommands.cs` 的 `EditorCommand{Kind,Op,Argument,Payload}` 同时驱动
+  菜单栏、右键与 `--diag menu`；菜单项只做展示与点击转发，不各自拼 op。
+- **右键**：保留 WebView2 默认编辑项（剪切/复制/粘贴/撤销/重做/全选及其启用态），在
+  `ContextMenuRequested` 中按 `Name` 过滤浏览器项，再追加文件/查找/格式/插入/表格组。
+  自定义项固定复用（≤1000 配额）；`GetDeferral` 内先 `focusAt` 再 `tableInfo`，保证行列命令
+  作用于点击的单元格。
+- **右键坐标**：前导脚本记录 `event.clientX/Y`（CSS 像素），壳直接交给内核 `focusAt`；
+  不再从 WebView2 `Location`（DIP）换算，避免缩放/DPI 双口径。
+- **表格门控**：菜单栏由 `selinfo.inTable` 维护，右键由 `tableInfo` 现查；代码文档整组不可用。
+- **行号**：`AppSettings.CodeLineNumbers` 是唯一偏好；切换后 `App.ApplyCodeLineNumbersToAll`
+  广播所有窗口，代码窗口发 `setCodeLineNumbers`，新窗口由 `init.opts.lineNumbers` 继承。
+- **打印**：`CoreWebView2.ShowPrintUI()`（与内核 `print` 同一浏览器打印面）；`Ctrl+P` 由前导脚本转发。
+- **剪贴板菜单项**：WPF 路由到不了 WebView2 子窗口，菜单关闭后还焦点并注入 `Ctrl+字母`。
+- **目录模式**：`_directoryRoot` 非空即目录模式；抽屉根唯一写入口 `SetDrawerRoot`；
+  锚点菜单用纯函数 `DrawerAnchor.Chain`（盘符根 → 当前），激活刷新节流 2 s。
+- **失效条件**：若改回浏览器加速键默认值，`Ctrl+P/G/Shift+G` 会被 Chromium 先消费，前导脚本
+  收不到；若关闭 WebView2 默认菜单，剪切/复制/粘贴需壳自行实现（当前未做）。
+
+> 自检样例：`MDPreview.exe --diag state <file.md>`、`--diag code <file.cs>`、`--diag menu <file>`、
+> `--diag dir <目录>`、`--diag export-html <src.md> <out.html>`、`--diag export-pdf <src.md> <out.pdf>`；
 > 结果写 stdout，退出码 0=成功。适合无桌面（远程/CI）时验收。
 
 ## 9. 构建与分发
@@ -216,7 +241,8 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 ## 10. 上游同步
 
-- 快照来源与差异：`kernel/SOURCE.md`；每个里程碑收口对照上游一次。
+- 快照来源与差异：`kernel/SOURCE.md`；每个工序/里程碑收口对照上游一次。2026-11-10 已同步到
+  `05493a3`（v0.6.0），内核增量只有表格光标跟随/`focusAt` 聚焦/`tableInfo` 行列号。
 - 只 cherry-pick 与 Windows 相关的修复；内核行为变更先过 Node 套件再进。
 - 上游文档（组件规格、场景）跨仓链接，不复制成「假真相」；Windows 自有组件在实现时另写规格。
 
@@ -226,8 +252,8 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
   协议版本不匹配时握手会显式失败，不会静默错乱。
 - **本地资源全盘只读**：若产品要打开不可信文档，必须把资源读取收窄到文档目录
   （与上游 §1.1 同一失效条件）。
-- **浏览器加速键已关闭**：`Ctrl+P`/`Ctrl+F` 等不再由 Chromium 处理；若将来要放行原生
-  打印/查找，需改回开关并重新安排快捷键，避免双份行为。
+- **浏览器加速键已关闭**：`Ctrl+S/O/P/F/±/0` 等由前导脚本转发为壳消息，Chromium 不再先消费；
+  若将来放行原生打印/查找，需改回开关并重新安排快捷键，避免双份行为。
 - **`--allow-file-access-from-files`**：本方案不使用；若将来为兼容回退到 `file://` 页面，
   需重新评估该开关的暴露面。
 - **Win10 1809**：WebView2 支持但未实机验证；已登记 OQ-W10，待 Win10 实机跑一遍便携包。

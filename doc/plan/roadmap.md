@@ -33,7 +33,9 @@ updated: 2026-11-10
 | W-02 `2026-11-10-context-menu` | 自建文档右键菜单（编辑/只读可用项）+ 拷贝文件路径 + 资源管理器定位 + 表格行列组 | 壳 | W-01 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-context-menu/result.md)；实机右键见 OQ-W12） |
 | W-03 `2026-11-10-editor-menus` | 格式/表格/剪贴板/查找下一个/行号开关/打印菜单补全（命令注册表统一驱动） | 壳 | W-02 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-editor-menus/result.md)；实机见 OQ-W13） |
 | W-04 `2026-11-10-directory-drawer` | 打开文件夹/目录模式、抽屉锚点菜单与激活 rescan、拖入 `.md` 开窗 | 壳 | W-03 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-directory-drawer/result.md)；拖入 `.md` 见 OQ-W14、实机见 OQ-W15） |
-| W-05 `2026-11-10-release-docs` | README/版本 0.6.0、REQ 与场景收口、architecture 回写、工序归档 | 文档 | W-01–W-04 | 待立项 |
+| W-05 `2026-11-10-release-docs` | README/版本 0.6.0、REQ 与场景收口、architecture 回写、工序归档 | 文档 | W-01–W-04 | ✅ 2026-11-10（[已归档](../history/works/2026-11-10-release-docs/result.md)） |
+
+> M5 代码与文档已收口（2026-11-10）：内核 0.6.0、右键菜单、格式/表格菜单、目录模式全部落地；实机验收见 OQ-W12–W15，拖入 `.md` 见 OQ-W14。新增组件/行为以 `design/architecture.md` §8.1 为准。
 
 验收：每个工序 brief 的任务全绿 + 门禁（`build.ps1`、Node 套件、C# 单测、`--diag`）+ 场景
 `verified`；M5 完成 = macOS README「主要功能」与菜单/右键动作逐项可在 Windows 走通。
