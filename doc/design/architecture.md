@@ -35,7 +35,7 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 `restoreForSave` 也硬编码 `file://` 前缀。Windows 必须把这两个常量参数化：
 
 - `PathPolicy = { urlPrefix, pathStyle }`：
-  - `urlPrefix`：`file://`（macOS）或 `https://mdpreview.local/__res`（Windows，§6.2）；
+  - `urlPrefix`：`file://`（macOS）或 `https://mdpreview.localhost/__res`（Windows，§6.2）；
   - `pathStyle`：`posix` / `win32`（复用已有的 `normalizePath`/`joinBase` 分支）。
 - 会话级注入：`init.opts` 带上策略，`document` 组件持有；`applyForLoad` 用壳返回的 URL，
   `restoreForSave` 按策略还原（否则保存会把资源 URL 写进文件——数据损坏）。
@@ -123,18 +123,26 @@ AppKit 菜单——各自换成本平台等价物（§6、§7、§9）。
 
 ### 6.1 页面来源
 
-- 内核产物与本地图片都从 `https://mdpreview.local` 同源提供：壳注册
-  `AddWebResourceRequestedFilter("https://mdpreview.local/*")`，在
+- 内核产物与本地图片都从 `https://mdpreview.localhost` 同源提供：壳注册
+  `AddWebResourceRequestedFilter("https://mdpreview.localhost/*")`，在
   `WebResourceRequested` 里读盘应答（`/` → `index.html`，MIME 按扩展名，
   `index.html` 附 CSP 响应头）。**不用虚拟主机目录映射**：映射后请求不再进壳，
   CSP 头也无处可加。
+- **主机名必须带 `localhost` 后缀（实测，2026-11-11）**：原用 `mdpreview.local`——
+  `.local` 是 mDNS 保留域，Chromium 每次导航会先解析它（+~1.1 s），并要求 Edge
+  SmartScreen 做信誉查询（`SmartScreenDnsResolver`，解析不到 `mdpreview.local`
+  超时 +~2.0 s，chromium log 里可见 `DidTimeOut: 1`）。两者都在导航前、页面脚本
+  执行之前，表现为「窗口出来了，编辑器还要等一下」，且**每开一个文档付一次**
+  （每次打开都是新 WebView2 + 新导航）。换成 `mdpreview.localhost` 后 Chromium
+  直判本地回环，两项均为 0：导航开始→文档创建 1150 ms → 42 ms，
+  `--diag` 单次从进程启动到编辑器 5.3 s → 2.3 s。不要改回 `.local` 或别的真实域名。
 - 不启本地 HTTP 服务；不做目录映射。
 - 关闭：DevTools、脚本对话框、下载、新窗口、权限请求（全部拒绝）；默认右键菜单保留
   （编辑型应用需要系统剪切/复制/粘贴项）。
 
 ### 6.2 图片与本地资源
 
-- 内核拿到的资源 URL 形如 `https://mdpreview.local/__res/C:/docs/a%20b/图.png`，
+- 内核拿到的资源 URL 形如 `https://mdpreview.localhost/__res/C:/docs/a%20b/图.png`，
   壳按前缀剥出路径、逐段 percent-decode、转回 win32 路径后读盘。
 - 为什么不用自定义 scheme：见 §1.1 的实测结论（注册 API 不可用）。
 - 为什么不用 `file://`：页面是同源 https，Chromium 拒绝 https 页面加载 `file://`

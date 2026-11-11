@@ -18,7 +18,7 @@
   `state.pathPolicy`。
   - 选「前缀」而非「scheme」：WebView2 的 `CustomSchemeRegistrations` 在 .NET 包装里为
     `null`（1.0.2903.40），自定义 scheme 注册不通；改由壳提供同源路径前缀
-    `https://mdpreview.local/__res`，图片与页面同源，CSP 无需放行。
+    `https://mdpreview.localhost/__res`，图片与页面同源，CSP 无需放行。
 - **文件**：
   - `src/kernel/semantics/paths.js`：新增 `DEFAULT_PATH_POLICY`、`normalizePolicy`、
     `isWindowsAbsolute`、`resourceUrlFromPath`、`resourcePathFromUrl`；旧函数保留（兼容）。

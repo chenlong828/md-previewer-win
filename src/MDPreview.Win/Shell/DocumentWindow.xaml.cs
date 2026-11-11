@@ -97,6 +97,7 @@ public partial class DocumentWindow : Window
     async Task InitializeAsync()
     {
         if (_host is not null) return;
+        Perf.Mark("window.loaded");
 
         if (!AppInfo.HasKernel)
         {
@@ -185,6 +186,7 @@ public partial class DocumentWindow : Window
         };
         var payload = new JsonObject { ["markdown"] = markdown, ["opts"] = opts };
         await _kernel!.SendAsync("init", payload, TimeSpan.FromSeconds(30));
+        Perf.Mark("init.done");
 
         var handshake = _kernel.Handshake;
         var protocol = handshake?["protocolVersion"]?.GetValue<int>() ?? 0;

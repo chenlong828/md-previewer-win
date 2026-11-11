@@ -37,7 +37,7 @@ Windows 侧以快照方式接入，2026-11-10 完成 M5 全量对齐：菜单栏
 
 ```text
 WPF 壳（net9.0-windows）                     WebView2
-窗口 · 菜单 · 文件 IO · 编码 · 抽屉 · 打印      https://mdpreview.local（内核产物 + 本地图片）
+窗口 · 菜单 · 文件 IO · 编码 · 抽屉 · 打印      https://mdpreview.localhost（内核产物 + 本地图片）
         │                                          │
         └──── v2 JSON 帧（41 op / 7 通知 / 2 请求）──┘
                     内核：transport · contract · semantics
@@ -45,7 +45,7 @@ WPF 壳（net9.0-windows）                     WebView2
 ```
 
 - 内核产物来自上游 `web/`（Milkdown 7.7 / ProseMirror），由壳按同源 URL 读盘供给，不联网。
-- 本地图片走同源前缀 `https://mdpreview.local/__res/<编码后的绝对路径>`（全盘只读；
+- 本地图片走同源前缀 `https://mdpreview.localhost/__res/<编码后的绝对路径>`（全盘只读；
   CSP `connect-src 'none'` 断外传）。
 - 磁盘写入只在壳：编码（UTF-8/GB18030）、原子写、尾换行归一。
 

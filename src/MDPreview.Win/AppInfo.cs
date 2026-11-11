@@ -7,11 +7,18 @@ namespace MDPreview.Win;
 public static class AppInfo
 {
     public const string AppName = "MDPreview";
-    public const string VirtualHost = "mdpreview.local";
-    public const string PageUrl = "https://mdpreview.local/index.html";
+
+    /// <summary>
+    /// 页面源主机。<b>必须是 localhost 后缀</b>：Chromium 对 localhost 直接判定本地回环，
+    /// 既不查 DNS 也不进 Edge SmartScreen 信誉查询。原先用 <c>mdpreview.local</c>（.local 是
+    /// mDNS 保留域）时，每次导航要白付 mDNS 解析 ~1 s + SmartScreen 解析超时 ~2 s，
+    /// 表现为「窗口出来了但编辑器要等一下」——每次打开文档都发生一次（见 architecture §6.1）。
+    /// </summary>
+    public const string VirtualHost = "mdpreview.localhost";
+    public const string PageUrl = "https://mdpreview.localhost/index.html";
 
     /// <summary>本地图片的同源 URL 前缀（壳在 WebResourceRequested 里读盘应答）。</summary>
-    public const string ResourcePrefix = "https://mdpreview.local/__res";
+    public const string ResourcePrefix = "https://mdpreview.localhost/__res";
 
     public const int ProtocolVersion = 2;
 

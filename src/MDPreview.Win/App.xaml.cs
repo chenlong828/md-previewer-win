@@ -38,6 +38,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         Log.Info($"start v{typeof(App).Assembly.GetName().Version} args=[{string.Join(' ', e.Args)}]");
+        Perf.Mark($"app.startup (exe→OnStartup {Perf.SinceProcessStart()}ms)");
 
         if (e.Args.Length > 1 && e.Args[0] == "--diag")
         {

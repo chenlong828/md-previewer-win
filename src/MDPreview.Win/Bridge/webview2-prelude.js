@@ -11,6 +11,16 @@
             window.chrome.webview.postMessage(json);
         }
     });
+    // 打开耗时观测：文档创建/load 两个时刻回报，壳只写日志（页面不必改内核）
+    function hostPerf(stage) {
+        try {
+            window.chrome.webview.postMessage(JSON.stringify({
+                __host: 'perf', stage: stage, t: Math.round(performance.now())
+            }));
+        } catch (e) { /* 观测失败不影响主流程 */ }
+    }
+    hostPerf('doc.start');
+    window.addEventListener('load', function () { hostPerf('doc.load'); });
     // 内核 bundle 求值前可能已有帧到达（壳侧不等 boot 就会早发）；先暂存，待 receive 可用再补投。
     var pending = [];
     var receiveReady = false;

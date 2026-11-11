@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.Wpf;
 namespace MDPreview.Win.Bridge;
 
 /// <summary>
-/// WebView2 宿主：内核产物与本地图片都从 <c>https://mdpreview.local</c> 同源提供，
+/// WebView2 宿主：内核产物与本地图片都从 <c>https://mdpreview.localhost</c> 同源提供，
 /// 由壳在 <see cref="CoreWebView2.WebResourceRequested"/> 里读盘应答（页面带 CSP 头）。
 /// 不启本地 HTTP 服务、不注册自定义 scheme、不做目录映射——只有一条受控的读入口。
 /// </summary>
@@ -39,12 +39,17 @@ public sealed class KernelHost
 
     public async Task InitializeAsync()
     {
+        // 页面源固定为 *.localhost（见 AppInfo.VirtualHost）：Chromium 对 localhost 直接判定本地回环，
+        // 不查 DNS，也不进 Edge SmartScreen 的信誉查询。若换成 mdpreview.local 这类 .local 域名，
+        // 每次导航会先付 mDNS 解析（~1 s）与 SmartScreen 解析超时（~2 s），表现为「打开卡一下」。
         var env = await CoreWebView2Environment.CreateAsync(
             browserExecutableFolder: null,
             userDataFolder: Path.Combine(AppInfo.UserDataDirectory, "WebView2"),
             new CoreWebView2EnvironmentOptions("--disable-features=msWebOOUI,msPdfOOUI"));
+        Perf.Mark("webview.env");
 
         await _web.EnsureCoreWebView2Async(env);
+        Perf.Mark("webview.ready");
         Core = _web.CoreWebView2;
 
         var settings = Core.Settings;
@@ -67,7 +72,7 @@ public sealed class KernelHost
         Client.DroppedImage += (mime, data) => DroppedImage?.Invoke(mime, data);
         Client.RequestHandler = (op, payload) => RequestHandler?.Invoke(op, payload) ?? Task.FromResult<JsonNode?>(null);
 
-        Core.AddWebResourceRequestedFilter("https://mdpreview.local/*", CoreWebView2WebResourceContext.All);
+        Core.AddWebResourceRequestedFilter("https://" + AppInfo.VirtualHost + "/*", CoreWebView2WebResourceContext.All);
         Core.WebResourceRequested += OnWebResourceRequested;
 
         Core.NewWindowRequested += (_, e) => e.Handled = true;
@@ -75,6 +80,9 @@ public sealed class KernelHost
         Core.PermissionRequested += (_, e) => e.Handled = true;
 
         await Core.AddScriptToExecuteOnDocumentCreatedAsync(LoadPrelude());
+        Perf.Mark("webview.prelude");
+        Core.NavigationCompleted += (_, e) => Perf.Mark($"nav.completed success={e.IsSuccess}");
+        Perf.Mark("nav.start");
         Core.Navigate(AppInfo.PageUrl);
     }
 
@@ -142,7 +150,7 @@ public sealed class KernelHost
 }
 
 /// <summary>
-/// <c>https://mdpreview.local/__res/C:/a b/x.png</c> → <c>C:\a b\x.png</c>
+/// <c>https://mdpreview.localhost/__res/C:/a b/x.png</c> → <c>C:\a b\x.png</c>
 /// （与内核 PathPolicy 的编码口径对齐）。
 /// </summary>
 public static class ResourceUri

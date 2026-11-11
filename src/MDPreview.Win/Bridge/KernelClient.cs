@@ -130,6 +130,9 @@ public sealed class KernelClient
                         frame["mime"]?.GetValue<string>() ?? "",
                         frame["data"]?.GetValue<string>() ?? "");
                     return;
+                case "perf":
+                    Perf.Mark($"page.{frame["stage"]?.GetValue<string>()} (page t={frame["t"]?.GetValue<int>()}ms)");
+                    return;
             }
         }
 
@@ -160,7 +163,11 @@ public sealed class KernelClient
             return;
         }
 
-        if (op == "boot") _booted.TrySetResult(true);
+        if (op == "boot")
+        {
+            Perf.Mark("kernel.boot");
+            _booted.TrySetResult(true);
+        }
         Notification?.Invoke(op, payload);
     }
 
